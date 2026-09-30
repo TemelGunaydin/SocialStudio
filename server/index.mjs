@@ -8,11 +8,13 @@ import { catalog, getApp } from './catalog.mjs';
 import { openStore } from './db.mjs';
 import { generateCopy, generateImage } from './openai.mjs';
 import { connectedAccount, finishConnection, publish, startConnection } from './x.mjs';
+import { createUsageMonitor } from './usage.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 if (existsSync(join(root, '.env'))) process.loadEnvFile(join(root, '.env'));
 const dataDir = resolve(root, process.env.DATA_DIR || './data');
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || '127.0.0.1';
 const draftHour = Number(process.env.DRAFT_HOUR || 10);
 const publicUrl = new URL(process.env.PUBLIC_BASE_URL || `http://localhost:${port}`);
 const adminPassword = process.env.ADMIN_PASSWORD || '';
@@ -22,6 +24,7 @@ if (!adminPassword || adminPassword.startsWith('change-this') || sessionSecret.l
 }
 if (!Number.isInteger(draftHour) || draftHour < 0 || draftHour > 23) throw new Error('DRAFT_HOUR 0 ile 23 arasında tam sayı olmalı.');
 const store = openStore(dataDir);
+const usage = createUsageMonitor(store);
 const publicDir = join(root, 'public');
 const loginAttempts = new Map();
 const now = () => new Date().toISOString();
@@ -193,8 +196,14 @@ async function handle(req, res) {
       openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
       xConfigured: Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET),
       dailyRun: store.dailyRun.get(day) || null,
-      draftHour
+      draftHour, usage: usage.summary()
     });
+  }
+  if (req.method === 'GET' && path === '/api/usage') {
+    return reply(res, 200, { usage: await usage.refresh() });
+  }
+  if (req.method === 'POST' && path === '/api/usage/refresh') {
+    return reply(res, 200, { usage: await usage.refresh(true) });
   }
   if (req.method === 'GET' && path === '/api/x/connect') {
     res.writeHead(302, { Location: startConnection(store), 'Cache-Control': 'no-store' });
@@ -203,6 +212,8 @@ async function handle(req, res) {
   if (req.method === 'GET' && path === '/api/x/callback') {
     try {
       await finishConnection(store, url.searchParams.get('state'), url.searchParams.get('code'));
+      store.deleteSetting.run('x_credits');
+      usage.invalidate();
       res.writeHead(302, { Location: '/?x=connected' });
     } catch (error) {
       res.writeHead(302, { Location: `/?x_error=${encodeURIComponent(error.message)}` });
@@ -211,6 +222,7 @@ async function handle(req, res) {
   }
   if (req.method === 'POST' && path === '/api/x/disconnect') {
     store.deleteSetting.run('x_token');
+    store.deleteSetting.run('x_credits');
     return reply(res, 200, { ok: true });
   }
   if (req.method === 'POST' && path === '/api/drafts/generate') {
@@ -283,7 +295,7 @@ async function handle(req, res) {
       } catch (error) {
         store.markFailed.run(error.uncertain ? 'uncertain' : 'draft', error.message, now(), id);
         throw error;
-      }
+      } finally { usage.invalidate(); }
     }
     return fail(res, 404, 'İşlem bulunamadı.');
   }
@@ -303,9 +315,7 @@ const server = createServer((req, res) => {
   });
 });
 
-const localHost = publicUrl.hostname === 'localhost' || publicUrl.hostname === '127.0.0.1' ? '127.0.0.1'
-  : publicUrl.hostname === '[::1]' ? '::1' : undefined;
-server.listen(port, localHost, () => {
+server.listen(port, host, () => {
   console.log(`Social Studio: ${publicUrl.origin}`);
   setTimeout(checkDaily, 2000).unref();
   setInterval(checkDaily, 60_000).unref();

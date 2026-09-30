@@ -64,6 +64,20 @@
           <div class="metric"><span class="metric-label">SIRADAKİ TASLAK</span><strong id="metric-next">10:00</strong><small>Her gün, İstanbul saati</small></div>
         </section>
 
+        <section class="usage-panel" aria-labelledby="usage-title">
+          <div class="usage-heading">
+            <div><span class="eyebrow">X BÜTÇESİ</span><h2 id="usage-title">Bakiye ve harcama</h2></div>
+            <div class="usage-actions"><span id="usage-updated" role="status" aria-live="polite">Bakiye kontrol ediliyor</span><button id="usage-refresh" class="button light" type="button">↻ Yenile</button></div>
+          </div>
+          <div class="usage-metrics">
+            <div class="usage-metric balance-metric"><span class="metric-label" id="balance-label">KALAN X BAKİYESİ</span><strong id="usage-balance">-</strong><small id="usage-balance-detail">X API'den alınır · USD</small></div>
+            <div class="usage-metric"><span class="metric-label">BUGÜNKÜ YAYIN MALİYETİ <span class="estimate-tag">TAHMİNİ</span></span><strong id="usage-today">$0,00</strong><small id="usage-today-detail">0 bağlantılı gönderi · İstanbul saati</small></div>
+            <div class="usage-metric"><span class="metric-label">BU AY YAYIN MALİYETİ <span class="estimate-tag">TAHMİNİ</span></span><strong id="usage-month">$0,00</strong><small id="usage-month-detail">0 bağlantılı gönderi</small></div>
+          </div>
+          <p id="usage-error" class="usage-error hidden" role="status"></p>
+          <details class="usage-explanation"><summary>Nasıl hesaplanıyor?</summary><p>Bakiye X geliştirici hesabının toplam kredisidir; diğer uygulamaların kullanımı da bakiyeyi etkileyebilir. Panel açıkken 5 dakikada bir kontrol edilir. Yayın maliyeti, bu panelden başarıyla yayınlanan bağlantılı gönderi sayısı × <span id="usage-unit-price">$0,20</span> olarak hesaplanır. Görsel yükleme, hesap okuma, başarısız veya belirsiz istekler ve OpenAI giderleri dahil değildir. Tahminlerde güncel birim fiyat kullanılır. Kesin harcama ve kredi yüklemeleri için <a href="https://console.x.com/" target="_blank" rel="noopener noreferrer">X Developer Console</a>'u kontrol et. <a href="https://docs.x.com/x-api/getting-started/pricing" target="_blank" rel="noopener noreferrer">Fiyat kaynağı</a> · <span id="usage-pricing-date"></span></p></details>
+        </section>
+
         <section class="studio-grid">
           <div class="queue-panel">
             <div class="section-heading"><div><span class="eyebrow">CONTENT QUEUE</span><h2 id="queue-title">İnceleme bekleyenler</h2></div><span id="queue-count" class="pill">0 taslak</span></div>

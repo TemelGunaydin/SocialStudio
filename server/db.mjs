@@ -56,6 +56,10 @@ export function openStore(dataDir) {
     dailyStart: db.prepare(`INSERT OR IGNORE INTO daily_runs (day, result, created_at) VALUES (?, 'running', ?)`),
     dailyFinish: db.prepare('UPDATE daily_runs SET result = ?, error = ? WHERE day = ?'),
     appCount: db.prepare('SELECT COUNT(*) AS count FROM drafts WHERE app_id = ?'),
+    publishedUsage: db.prepare(`SELECT
+      COALESCE(SUM(CASE WHEN published_at >= ? THEN 1 ELSE 0 END), 0) AS today,
+      COUNT(*) AS month FROM drafts
+      WHERE status = 'published' AND published_at >= ? AND published_at <= ?`),
     lastApp: db.prepare('SELECT app_id FROM drafts ORDER BY created_at DESC LIMIT 1')
   };
   return { db, ...statements };

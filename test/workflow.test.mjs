@@ -17,22 +17,25 @@ test('owner reviews a draft and publishing stays blocked without X authorization
   const server = spawn(process.execPath, ['server/index.mjs'], {
     cwd: root,
     env: {
-      ...process.env, PORT: String(port), PUBLIC_BASE_URL: base, DATA_DIR: dir,
+      ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_BASE_URL: base, DATA_DIR: dir,
       ADMIN_PASSWORD: 'test-owner-password', SESSION_SECRET: 'test-session-key-at-least-32-characters',
       OPENAI_API_KEY: '', X_CLIENT_ID: '', X_CLIENT_SECRET: ''
     },
     stdio: 'pipe'
   });
+  let serverErrors = '';
+  server.stderr.on('data', (chunk) => { serverErrors += chunk; });
   try {
     let ready = false;
     for (let i = 0; i < 80; i++) {
-      if (server.exitCode !== null) throw new Error(`Server exited: ${server.exitCode}`);
+      if (server.exitCode !== null) throw new Error(`Server exited: ${server.exitCode}\n${serverErrors}`);
       try { const response = await fetch(`${base}/api/state`); ready = response.status === 401; if (ready) break; }
       catch { await delay(100); }
     }
     assert.equal(ready, true, 'server started');
     const unauthorized = await fetch(`${base}/api/state`);
     assert.equal(unauthorized.status, 401);
+    assert.equal((await fetch(`${base}/api/usage`)).status, 401);
     const crossSite = await fetch(`${base}/api/login`, { method: 'POST', body: JSON.stringify({ password: 'test-owner-password' }) });
     assert.equal(crossSite.status, 403);
     const login = await fetch(`${base}/api/login`, {
@@ -45,6 +48,12 @@ test('owner reviews a draft and publishing stays blocked without X authorization
     const headers = { Origin: base, Cookie: cookie, 'Content-Type': 'application/json' };
     const state = await (await fetch(`${base}/api/state`, { headers })).json();
     assert.equal(state.catalog.length, 6);
+    assert.equal(state.usage.estimate.today.costUsd, 0);
+    const usage = await (await fetch(`${base}/api/usage`, { headers })).json();
+    assert.equal(usage.usage.connected, false);
+    assert.equal(usage.usage.balance, null);
+    assert.equal((await fetch(`${base}/api/usage/refresh`, { method: 'POST', headers: { Cookie: cookie, Origin: 'https://other.example' } })).status, 403);
+    assert.equal((await fetch(`${base}/api/usage/refresh`, { method: 'POST', headers })).status, 200);
     const create = await fetch(`${base}/api/drafts/manual`, {
       method: 'POST', headers, body: JSON.stringify({ appId: 'heptapod', text: 'Follow spoken words with a private transcript on your Mac.' })
     });

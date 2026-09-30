@@ -4,11 +4,13 @@ let selectedId = null;
 let filter = 'draft';
 let busy = false;
 let dirty = false;
+let usageBusy = false;
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const appFor = (id) => state.catalog.find((app) => app.id === id);
 const selected = () => state?.drafts.find((draft) => draft.id === selectedId);
 const formatDate = (value) => new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Istanbul' }).format(new Date(value));
+const formatUsd = (value) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'USD' }).format(value);
 
 function toast(message, error = false) {
   const node = $('#toast');
@@ -44,6 +46,7 @@ async function refresh(preserve = true) {
     if (!preserve || !state.drafts.some((draft) => draft.id === selectedId)) selectedId = state.drafts.find((draft) => draft.status === 'draft')?.id || state.drafts[0]?.id || null;
     dirty = false;
     render();
+    refreshUsage();
   } catch (error) {
     if (error.message === 'Oturum açın.') setLoggedIn(false);
     else toast(error.message, true);
@@ -68,8 +71,43 @@ function render() {
   $('#manual-app').innerHTML = state.catalog.map((app) => `<option value="${app.id}">${escapeHtml(app.name)}</option>`).join('');
   renderConnection();
   renderBanners();
+  renderUsage();
   renderList();
   renderReview();
+}
+
+function renderUsage() {
+  const usage = state?.usage;
+  if (!usage) return;
+  const { balance, estimate, connected, stale, error } = usage;
+  $('#usage-balance').textContent = balance ? formatUsd(balance.totalUsd) : '-';
+  $('#balance-label').textContent = stale ? 'SON BİLİNEN X BAKİYESİ' : 'KALAN X BAKİYESİ';
+  $('#usage-balance-detail').textContent = balance ? `Ön ödemeli ${formatUsd(balance.prepaidUsd)} · Ücretsiz ${formatUsd(balance.freeUsd)}` : connected ? "X API'den alınır · USD" : 'Bakiyeyi görmek için X hesabını bağla';
+  $('#usage-today').textContent = formatUsd(estimate.today.costUsd);
+  $('#usage-month').textContent = formatUsd(estimate.monthToDate.costUsd);
+  $('#usage-today-detail').textContent = `${estimate.today.posts} bağlantılı gönderi · İstanbul saati`;
+  $('#usage-month-detail').textContent = `${estimate.monthToDate.posts} bağlantılı gönderi · Ay başından bugüne`;
+  $('#usage-unit-price').textContent = formatUsd(estimate.urlPostCostUsd);
+  $('#usage-pricing-date').textContent = `Fiyat kontrolü: ${estimate.pricingCheckedAt.split('-').reverse().join('.')}`;
+  $('#usage-updated').textContent = usageBusy ? 'Kontrol ediliyor…' : balance ? `Son güncelleme: ${formatDate(balance.updatedAt)}` : connected ? 'Bakiye henüz alınamadı' : 'X bağlantısı gerekli';
+  $('#usage-refresh').disabled = !connected || usageBusy;
+  $('#usage-error').classList.toggle('hidden', !error);
+  $('#usage-error').textContent = error ? `${balance ? 'Son bilinen bakiye gösteriliyor. ' : ''}Bakiye güncellenemedi: ${error}` : '';
+}
+
+async function refreshUsage(force = false) {
+  if (!state || usageBusy) return;
+  usageBusy = true;
+  renderUsage();
+  try {
+    const result = await api(force ? '/api/usage/refresh' : '/api/usage', force ? 'POST' : 'GET');
+    if (state) state.usage = result.usage;
+  } catch (error) {
+    if (state) { state.usage.error = error.message; state.usage.stale = Boolean(state.usage.balance); }
+  } finally {
+    usageBusy = false;
+    if (state) renderUsage();
+  }
 }
 
 function renderConnection() {
@@ -256,6 +294,10 @@ $('#logout').addEventListener('click', async () => {
   try { await api('/api/logout', 'POST'); state = null; setLoggedIn(false); }
   catch (error) { toast(error.message, true); }
 });
+
+$('#usage-refresh').addEventListener('click', () => refreshUsage(true));
+setInterval(() => { if (state && !document.hidden) refreshUsage(); }, 5 * 60_000);
+document.addEventListener('visibilitychange', () => { if (state && !document.hidden) refreshUsage(); });
 
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => {
   filter = button.dataset.filter;

@@ -5,6 +5,7 @@ import { getApp } from './catalog.mjs';
 
 const api = 'https://api.x.com/2';
 const scopes = 'tweet.read tweet.write users.read media.write offline.access';
+const tokenRefreshes = new WeakMap();
 
 function credentials() {
   const { X_CLIENT_ID, X_CLIENT_SECRET, PUBLIC_BASE_URL } = process.env;
@@ -87,15 +88,34 @@ export function connectedAccount(store) {
 async function accessToken(store, fetchImpl = fetch) {
   const raw = store.getSetting.get('x_token')?.value;
   if (!raw) throw new Error('Önce X hesabını bağlayın.');
-  let token = JSON.parse(raw);
+  const token = JSON.parse(raw);
   if (token.expires_at > Date.now() + 60_000) return token.access_token;
-  const { clientId } = credentials();
-  const refreshed = await tokenRequest({
-    grant_type: 'refresh_token', refresh_token: token.refresh_token, client_id: clientId
-  }, fetchImpl);
-  token = { ...token, ...refreshed, refresh_token: refreshed.refresh_token || token.refresh_token };
-  store.setSetting.run('x_token', JSON.stringify(token));
-  return token.access_token;
+  if (tokenRefreshes.has(store)) return tokenRefreshes.get(store);
+  const pending = (async () => {
+    const { clientId } = credentials();
+    const refreshed = await tokenRequest({
+      grant_type: 'refresh_token', refresh_token: token.refresh_token, client_id: clientId
+    }, fetchImpl);
+    if (store.getSetting.get('x_token')?.value !== raw) throw new Error('X bağlantısı değişti. İsteği yeniden deneyin.');
+    const updated = { ...token, ...refreshed, refresh_token: refreshed.refresh_token || token.refresh_token };
+    store.setSetting.run('x_token', JSON.stringify(updated));
+    return updated.access_token;
+  })();
+  tokenRefreshes.set(store, pending);
+  try { return await pending; }
+  finally { tokenRefreshes.delete(store); }
+}
+
+export async function readCredits(store, fetchImpl = fetch) {
+  const token = await accessToken(store, fetchImpl);
+  const response = await fetchImpl(`${api}/usage/credits`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15_000)
+  });
+  const { data } = await jsonResponse(response, 'X bakiye');
+  if (!data || !['total_balance', 'prepaid_balance', 'free_balance'].every((key) => typeof data[key] === 'number' && Number.isFinite(data[key])) || data.total_balance < 0 || data.free_balance < 0) {
+    throw new Error('X geçerli bir bakiye bilgisi döndürmedi.');
+  }
+  return { totalUsd: data.total_balance, prepaidUsd: data.prepaid_balance, freeUsd: data.free_balance };
 }
 
 export async function publish(store, draft, dataDir, fetchImpl = fetch) {
