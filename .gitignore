@@ -1,3 +1,10 @@
 .env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+*.log
 data/
+dist/
+.cache/
 .DS_Store

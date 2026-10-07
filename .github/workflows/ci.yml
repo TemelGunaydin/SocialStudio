@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: '22.13.0'
+          - os: ubuntu-latest
+            node: '24'
+          - os: macos-15
+            node: '22.23.3'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Test without provider credentials
+        run: npm test
+      - name: Check browser scripts
+        run: |
+          node --check public/app.js
+          node --check public/onboarding.js
+
+  mac-package:
+    name: Verify local Mac package (not a release)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build ad-hoc signed package
+        run: bash scripts/package-mac.sh
+      - name: Verify signature, bundled runtime and private-file exclusion
+        run: |
+          codesign --verify --deep --strict 'dist/Social Studio.app'
+          'dist/Social Studio.app/Contents/Resources/runtime/bin/node' --test
+          test -f 'dist/Social Studio.app/Contents/Resources/studio/LICENSE'
+          test -f 'dist/Social Studio.app/Contents/Resources/runtime/LICENSE'
+          if find 'dist/Social Studio.app' \( -name '.env' -o -name '*.sqlite*' -o -name data -o -name '.git' \) -print | grep -q .; then
+            echo 'Unexpected private file in application bundle' >&2
+            exit 1
+          fi
+      # No artifacts or releases: this package is not Developer ID signed/notarized.

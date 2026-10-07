@@ -1,10 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, chmodSync } from 'node:fs';
+import { mkdirSync, chmodSync, existsSync } from 'node:fs';
+import { catalog as legacyCatalog } from './catalog.mjs';
 import { join } from 'node:path';
 
 export function openStore(dataDir) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const databasePath = join(dataDir, 'studio.sqlite');
+  const existingInstallation = existsSync(databasePath);
   const db = new DatabaseSync(databasePath);
   chmodSync(databasePath, 0o600);
   db.exec(`
@@ -28,14 +30,41 @@ export function openStore(dataDir) {
       x_post_id TEXT,
       error TEXT
     );
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+      platform TEXT NOT NULL, url TEXT NOT NULL, icon TEXT NOT NULL,
+      color TEXT NOT NULL, features TEXT NOT NULL, guardrail TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY, result TEXT NOT NULL, error TEXT, created_at TEXT NOT NULL);
   `);
+  // Expand-only migration: old drafts keep their project IDs; new installs start empty.
+  // INSERT OR IGNORE also repairs interrupted migrations without overwriting edited projects.
+  if (!db.prepare("SELECT 1 FROM settings WHERE key = 'projects_migrated'").get()) {
+    const seed = db.prepare(`INSERT OR IGNORE INTO projects
+      (id, name, category, platform, url, icon, color, features, guardrail)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    db.exec('BEGIN');
+    try {
+      if (existingInstallation) {
+        for (const app of legacyCatalog) {
+          seed.run(app.id, app.name, app.category, app.platform, app.url, app.icon,
+            app.color, JSON.stringify(app.features), app.guardrail || '');
+        }
+      }
+      db.prepare("INSERT INTO settings(key, value) VALUES ('projects_migrated', '1')").run();
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  }
   // A process may stop after sending a Post but before recording X's response.
   // Never retry such a draft automatically because that can publish a duplicate.
   db.prepare(`UPDATE drafts SET status = 'uncertain', error = 'Sunucu yayın sırasında durdu. X hesabındaki son gönderiyi kontrol edin.' WHERE status = 'publishing'`).run();
   db.prepare(`UPDATE daily_runs SET result = 'failed', error = 'Sunucu taslak üretimi sırasında durdu.' WHERE result = 'running'`).run();
   const statements = {
+    projects: db.prepare('SELECT * FROM projects ORDER BY rowid'),
+    project: db.prepare('SELECT * FROM projects WHERE id = ?'),
+    addProject: db.prepare(`INSERT INTO projects (id, name, category, platform, url, icon, color, features, guardrail)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     list: db.prepare('SELECT * FROM drafts ORDER BY created_at DESC LIMIT 120'),
     get: db.prepare('SELECT * FROM drafts WHERE id = ?'),
     create: db.prepare(`INSERT INTO drafts

@@ -1,10 +1,16 @@
 {
-  "name": "buildandruns-social-studio",
+  "name": "social-studio",
   "version": "1.0.0",
+  "description": "Local-first X marketing studio with guided setup and human-approved publishing",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/TemelGunaydin/SocialStudio.git" },
+  "bugs": { "url": "https://github.com/TemelGunaydin/SocialStudio/issues" },
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "package:mac": "bash scripts/package-mac.sh",
     "start": "node server/index.mjs",
     "dev": "node --watch server/index.mjs",
     "test": "node --test"

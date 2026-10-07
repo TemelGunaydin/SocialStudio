@@ -17,8 +17,8 @@ test('owner reviews a draft and publishing stays blocked without X authorization
   const server = spawn(process.execPath, ['server/index.mjs'], {
     cwd: root,
     env: {
-      ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_BASE_URL: base, DATA_DIR: dir,
-      ADMIN_PASSWORD: 'test-owner-password', SESSION_SECRET: 'test-session-key-at-least-32-characters',
+      ...process.env, STUDIO_HOME: dir, STUDIO_READY_FILE: '', PORT: String(port), HOST: '127.0.0.1', PUBLIC_BASE_URL: base, DATA_DIR: dir,
+      ADMIN_PASSWORD_HASH: '', ADMIN_PASSWORD: 'test-owner-password', SESSION_SECRET: 'test-session-key-at-least-32-characters',
       OPENAI_API_KEY: '', X_CLIENT_ID: '', X_CLIENT_SECRET: ''
     },
     stdio: 'pipe'
@@ -47,22 +47,43 @@ test('owner reviews a draft and publishing stays blocked without X authorization
     const cookie = login.headers.get('set-cookie').split(';')[0];
     const headers = { Origin: base, Cookie: cookie, 'Content-Type': 'application/json' };
     const state = await (await fetch(`${base}/api/state`, { headers })).json();
-    assert.equal(state.catalog.length, 6);
+    assert.equal(state.catalog.length, 0);
     assert.equal(state.usage.estimate.today.costUsd, 0);
+    assert.equal((await fetch(`${base}/api/projects`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
+    assert.equal((await fetch(`${base}/api/projects/suggest`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
+    assert.equal((await fetch(`${base}/api/projects/suggest`, { method: 'POST', headers, body: JSON.stringify({ url: 'https://example.com' }) })).status, 400);
+    assert.equal((await fetch(`${base}/api/drafts/generate`, { method: 'POST', headers, body: '{}' })).status, 400);
+    const projectInput = { name: 'Heptapod', url: 'https://example.com/heptapod/', category: 'Speech tools',
+      platform: 'Mac', features: 'Live translation of Mac audio.\nLocal transcripts after model download.',
+      guardrail: 'Never claim offline live translation.' };
+    const invalid = await fetch(`${base}/api/projects`, { method: 'POST', headers, body: JSON.stringify({ ...projectInput, url: 'file:///etc/passwd' }) });
+    assert.equal(invalid.status, 400);
+    const add = await fetch(`${base}/api/projects`, { method: 'POST', headers, body: JSON.stringify(projectInput) });
+    assert.equal(add.status, 201);
+    const project = (await add.json()).project;
+    assert.equal(project.url, projectInput.url);
+    assert.equal(project.features.length, 2);
+    assert.equal(project.icon, '/favicon.svg');
+    assert.equal((await (await fetch(`${base}/api/state`, { headers })).json()).catalog.length, 1);
     const usage = await (await fetch(`${base}/api/usage`, { headers })).json();
     assert.equal(usage.usage.connected, false);
     assert.equal(usage.usage.balance, null);
     assert.equal((await fetch(`${base}/api/usage/refresh`, { method: 'POST', headers: { Cookie: cookie, Origin: 'https://other.example' } })).status, 403);
     assert.equal((await fetch(`${base}/api/usage/refresh`, { method: 'POST', headers })).status, 200);
     const create = await fetch(`${base}/api/drafts/manual`, {
-      method: 'POST', headers, body: JSON.stringify({ appId: 'heptapod', text: 'Follow spoken words with a private transcript on your Mac.' })
+      method: 'POST', headers, body: JSON.stringify({ appId: project.id, text: 'Follow spoken words with a private transcript on your Mac.' })
     });
     assert.equal(create.status, 201);
     const { draft } = await create.json();
     assert.equal(draft.status, 'draft');
+    const noIcon = await fetch(`${base}/api/drafts/${draft.id}`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ text: 'Still a draft.', mediaKind: 'icon' })
+    });
+    assert.equal(noIcon.status, 400);
     const edit = await fetch(`${base}/api/drafts/${draft.id}`, {
       method: 'POST', headers,
-      body: JSON.stringify({ text: 'Keep a private transcript of speech playing on your Mac.', mediaKind: 'icon' })
+      body: JSON.stringify({ text: 'Keep a private transcript of speech playing on your Mac.', mediaKind: 'none' })
     });
     assert.equal(edit.status, 200);
     const publishAttempt = await fetch(`${base}/api/drafts/${draft.id}/publish`, { method: 'POST', headers });
@@ -79,6 +100,23 @@ test('owner reviews a draft and publishing stays blocked without X authorization
     server.kill('SIGTERM');
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('existing drafts survive catalog migration, fresh installs stay empty, and reopening is idempotent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'social-studio-migrate-'));
+  try {
+    const old = openStore(dir);
+    old.create.run('legacy-1', 'thokka', 'Switch sounds', 'A local sound app.', 'https://buildandruns.com/thokka/', null, new Date().toISOString(), new Date().toISOString());
+    old.deleteSetting.run('projects_migrated'); // Simulate a database from before project migration.
+    old.db.close();
+    const upgraded = openStore(dir);
+    assert.equal(upgraded.get.get('legacy-1').app_id, 'thokka');
+    assert.equal(upgraded.projects.all().length, 6);
+    upgraded.db.close();
+    const reopened = openStore(dir);
+    assert.equal(reopened.projects.all().length, 6);
+    reopened.db.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('approved post sends the exact reviewed copy and link once', async () => {

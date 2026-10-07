@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getApp } from './catalog.mjs';
 
 const api = 'https://api.x.com/2';
 const scopes = 'tweet.read tweet.write users.read media.write offline.access';
@@ -125,8 +124,10 @@ export async function publish(store, draft, dataDir, fetchImpl = fetch) {
   if (draft.media_kind !== 'none') {
     let bytes;
     if (draft.media_kind === 'icon') {
-      const icon = getApp(draft.app_id)?.icon;
+      const icon = store.project.get(draft.app_id)?.icon;
       if (!icon) throw new Error('Uygulama görseli bulunamadı.');
+      if (icon === '/favicon.svg') throw new Error('Bu proje için ikon yok. Görselsiz yayınlayın veya görsel yükleyin.');
+      if (!icon || !icon.startsWith('https://buildandruns.com/')) throw new Error('İkon kaynağı desteklenmiyor; görsel yükleyin.');
       const response = await fetchImpl(icon, { signal: AbortSignal.timeout(20_000) });
       if (!response.ok) throw new Error(`Uygulama görseli alınamadı: ${response.status}`);
       bytes = Buffer.from(await response.arrayBuffer());

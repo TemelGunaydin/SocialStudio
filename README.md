@@ -1,40 +1,68 @@
-# Build & Runs Social Studio
+# Social Studio
 
-Altı Build & Runs uygulaması için günlük İngilizce X taslağı üretir. Taslaklar özel web panelinde görünür. Metin ve görsel düzenlenebilir; **yalnızca “Onayla ve yayınla” düğmesi** X API'ye gönderi oluşturma isteği yollar.
+[![CI](https://github.com/TemelGunaydin/SocialStudio/actions/workflows/ci.yml/badge.svg)](https://github.com/TemelGunaydin/SocialStudio/actions/workflows/ci.yml) · [MIT](LICENSE) · [X kurulum rehberi](docs/x-setup.md) · [Güvenlik](SECURITY.md) · [Katkıda bulun](CONTRIBUTING.md)
 
-## Çalıştırma
+Local-first X marketing studio with guided setup and human-approved publishing. The current UI and setup guide are in Turkish. Bring your own OpenAI and X API accounts; provider charges apply.
 
-Node.js 22.13+ gerekir. Projede üçüncü taraf npm bağımlılığı yoktur.
+Yerel, tek yöneticili X paylaşım paneli. Kendi projelerini tanımlarsın; her gün İngilizce bir taslak hazırlanır. Metni ve görseli inceleyip **Onayla ve yayınla** demeden X'e gönderi gönderilmez. Ücretli API hesapları uygulamanın değil, kuran kişinin kendi hesaplarıdır.
 
-1. Bu çalışma alanında `.env` hazırdır. Yeni bir kopyada `.env.example` dosyasını `.env` olarak kopyalayın ve güçlü bir `ADMIN_PASSWORD` ile en az 32 rastgele karakterden oluşan `SESSION_SECRET` girin. Hazır dosyadaki `ADMIN_PASSWORD`, panele giriş şifrenizdir.
-2. `.env` dosyasına `OPENAI_API_KEY` ekleyin. Bu anahtar, günlük metin ve isteğe bağlı görsel üretimi içindir. ChatGPT aboneliği API kullanımını kapsamaz.
-3. [X Developer Console](https://console.x.com/) içinde uygulamanın **User authentication settings** bölümünden OAuth 2.0'ı etkinleştirin ve **Web App** türünü seçin. Callback adresini `.env` içindeki `PUBLIC_BASE_URL` değerinin sonuna `/api/x/callback` ekleyerek ayarlayın; varsayılan adres `http://localhost:3000/api/x/callback` olur. Ardından **Keys and tokens** bölümünde görünen OAuth 2.0 **Client ID** ve **Client Secret** değerlerini `.env` içindeki `X_CLIENT_ID` ve `X_CLIENT_SECRET` alanlarına girin. Bunlar **API Key** ve **API Secret** değerlerinden farklıdır. Client ID görünmüyorsa OAuth 2.0 ayarını kaydedip Keys and tokens bölümünü tekrar açın. Uygulama `tweet.read`, `tweet.write`, `users.read`, `media.write` ve `offline.access` izinlerini ister.
-4. `npm start` çalıştırın, `PUBLIC_BASE_URL` adresini açın, `.env` içindeki `ADMIN_PASSWORD` ile giriş yapın ve X hesabını bağlayın.
+## Hızlı başlangıç
 
-Yerelde `PUBLIC_BASE_URL=http://localhost:3000` kullanılabilir. İnternete açık kurulumda HTTPS ve kalıcı bir `DATA_DIR` gerekir. Sunucu sürekli çalışmalıdır: her gün `DRAFT_HOUR` saatinde (Europe/Istanbul), en son taslağın uygulamasından sonraki uygulama için bir taslak üretir. O saatte kapalıysa tekrar açıldığında o günün taslağını üretir. Hata alan günlük üretim panelde görünür ve aynı gün otomatik tekrar denenmez. Onaylanmayan taslaklar yayınlanmaz.
+[Node.js 22.13+](https://nodejs.org/) kurduktan sonra:
 
-## Tailscale ile iPhone erişimi
+```sh
+git clone https://github.com/TemelGunaydin/SocialStudio.git
+cd SocialStudio
+npm start
+```
 
-Mac ve iPhone aynı Tailscale ağına bağlı olmalıdır. Mac'in güncel IPv4 adresini `tailscale ip -4` ile bulun. `.env` içinde `HOST` değerini bu IP, `PUBLIC_BASE_URL` değerini `http://MAC_TAILSCALE_IP:3000` yapın ve `npm start` ile sunucuyu yeniden başlatın. Her iki cihazda da paneli bu adres üzerinden açın. `HOST` yalnızca Tailscale arayüzünü dinler; Tailscale Mac'te sunucudan önce çalışmalıdır. Yerel kullanıma dönmek için `HOST=127.0.0.1` ve `PUBLIC_BASE_URL=http://localhost:3000` ayarlayın.
+Terminalde gösterilen **tam kurulum bağlantısını** aç ve şifreni belirle. API anahtarlarını dosya düzenlemeden paneldeki **Kurulum ve bağlantılar** bölümünden ekleyebilirsin. Üçüncü taraf npm bağımlılığı yok; `npm install` gerekmez.
 
-Mevcut X bağlantısı adres değişince korunur. X hesabını yeniden bağlamak için Developer Console'daki callback listesine yeni `PUBLIC_BASE_URL/api/x/callback` adresini ekleyin. Giriş ve yayın istekleri, `PUBLIC_BASE_URL` ile aynı adres üzerinden yapılmalıdır.
+**Yayın durumu:** Kaynak kodu MIT lisanslıdır. Henüz imzalı/notarize edilmiş bir Mac indirmesi yok. `dist/` repoya dahil değildir; aşağıdaki Mac akışı [paketi yerelde ürettikten](#mac-paketini-üretme-geliştirici) sonra kullanılabilir.
 
-HTTPS adresi için [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) de kullanılabilir: `tailscale serve --bg http://127.0.0.1:3000` çalıştırın, `HOST=127.0.0.1` bırakın ve `PUBLIC_BASE_URL` değerini komutun gösterdiği HTTPS adresiyle değiştirin. X callback adresini de buna göre güncelleyin.
+## Mac: çift tıkla başla
 
-## Görseller
+`npm run package:mac` ile yerelde üretilen `dist/Social Studio.app` paketini aç. Node uygulamanın içindedir; terminal veya ayrı Node kurulumu gerekmez (macOS 13+, Apple Silicon paketi burada doğrulandı). Yerel panel varsayılan tarayıcında açılır:
 
-Taslakta görselsiz yayın, uygulama ikonu, yerel PNG/JPEG/WebP dosyası veya OpenAI ile üretilen kare görsel seçilebilir. OpenAI görseli yalnızca panelde ilgili düğmeye basılınca üretilir ve onaydan önce önizlenir. Üretilen görseller X'e `made_with_ai` bilgisiyle gönderilir. Görsel boyutu 5 MB altında olmalıdır.
+1. **Panel şifreni belirle.** Şifreyi parola yöneticine kaydet; yeni şifre dosyaya düz metin değil tuzlanmış hash olarak yazılır.
+2. **OpenAI anahtarını yapıştır.** Rehber doğrudan anahtar oluşturma sayfasına yönlendirir. Anahtarlar ekranda gizlidir ve sonraki açılışta geri döndürülmez. Kaydetmek yalnızca yerel dosyayı günceller; API çağrısı yapmaz ve doğrulama anlamına gelmez. OpenAI olmadan elle taslakla başlayabilirsin.
+3. **Proje URL'sini ekle.** Önerileri kontrol et ve kaydet.
+4. **Kendi X uygulamanı bağla.** Paneldeki adım adım Developer Console rehberini izle; callback adresini kopyala ve OAuth 2.0 Client ID / Client Secret bilgilerini kaydet. Ortak X uygulaması veya uzak sunucu kullanılmaz. [Ayrıntılı X rehberi](docs/x-setup.md).
+5. **İlk taslağını oluştur.** Günlük ücretli üretim yeni kurulumlarda **kapalıdır**; son adımda istersen aç. Yayın her zaman ayrı onay ister.
 
-## Veri ve güvenlik
+Anahtarları sonradan **Kurulum ve bağlantılar** düğmesinden değiştirebilirsin; yeniden başlatmak gerekmez. Boş alan kayıtlı anahtarı korur. X bilgilerini değiştirmek mevcut bağlantıyı keser ve eski OAuth isteklerini geçersiz kılar. Anahtarlar Mac'te `~/Library/Application Support/Social Studio/.env`, veriler aynı dizindeki `data/` altında kalır. Bu klasörü yedekle. Uygulama paketini değiştirmen verilerini silmez. Pencereyi kapatmak sunucuyu durdurmaz; **⌘Q** onayından sonra sunucu kapanır. 3000 portu doluysa önce diğer yerel sunucuyu durdur.
 
-Taslaklar, X OAuth tokenları ve görseller `DATA_DIR` içindeki SQLite dosyası ile klasörde saklanır. Bu dizini kalıcı ve özel tutun; yedekleyin. Panel tek yöneticilidir ve şifreli oturum çerezi kullanır. Çoklu sunucu kopyası çalıştırmayın. Yayın isteği sırasında sunucu kapanırsa taslak `X üzerinde kontrol et` durumunda kalır; olası çift gönderimi önlemek için otomatik yeniden yayınlanmaz.
+**Dağıtım notu:** Mevcut paket yerel geliştirme için ad-hoc imzalıdır; Developer ID ile imzalanmış ve Apple tarafından notarize edilmiş bir genel sürüm değildir. İnternetten indirenlerde Gatekeeper uyarısı çıkabilir. Herkese açık, sorunsuz uygulama dağıtımından önce imzalama/notarization tamamlanmalı; Gatekeeper'ı kapatmayın.
 
-Ürün bilgileri [buildandruns.com](https://buildandruns.com/) sayfalarından `server/catalog.mjs` içine derlenmiştir. Ürün özellikleri değiştiğinde bu dosyayı güncelleyin; model yalnızca burada yer alan doğrulanmış özelliklerden yazması için yönlendirilir.
+## Kaynaktan çalıştırma (macOS / Linux / Windows)
 
-## Maliyet
+[Node.js 22.13+](https://nodejs.org/) kur ve proje klasöründe `npm start` çalıştır. İlk açılışta terminaldeki **tam kurulum bağlantısını** aç (sonunda `#setup=…` bulunur). Bu tek kullanımlık yerel bağlantı başka birinin ilk yönetici olmasını engeller; paylaşma. Normal `http://localhost:3000` adresi tek başına ilk yönetici kaydı yapamaz. Ardından yukarıdaki sihirbazı izle. Eski CLI yolu `npm run setup` da korunur; mevcut `.env` üzerine yazmaz.
 
-X'in [güncel fiyat listesine](https://docs.x.com/x-api/getting-started/pricing) göre URL içeren gönderi oluşturma isteği $0,20'dır. Günde bir gönderi yaklaşık $6/30 gün eder. Görsel yükleme, OpenAI metin/görsel kullanımı, barındırma ve vergiler ayrıca değerlendirilmeli. X Developer Console içinde harcama limiti belirleyin.
+Mevcut `.env` kurulumları eski yönetici şifresi ve kayıtlı X hesabıyla çalışmaya devam eder. Mac paketinin profili kaynak klasöründeki `.env` ve `data/` dizininden **ayrıdır**; eski kurulumun yeni ve boş profile otomatik kopyalanmaz. Eski paneli kullanmak için proje klasöründe `npm start` yeterlidir.
 
-Panelde **Bakiye ve harcama** bölümü bulunur. Gerçek USD bakiyesi mevcut X OAuth bağlantısıyla [`GET /2/usage/credits`](https://docs.x.com/x-api/usage/get-usage-credits) üzerinden alınır; ek anahtar gerekmez. Panel açıkken 5 dakikada bir kontrol edilir; “Yenile” elle kontrol eder (en fazla 30 saniyede bir). Son başarılı değer SQLite'ta saklanır. API erişilemezse eski bakiye tarih ve hata mesajıyla gösterilir. Bakiye geliştirici hesabı genelindedir, yalnızca bu projeye ayrılmış bir bütçe değildir.
+## Proje ekleme
 
-X'in kamuya açık Usage API'si günlük USD harcama dökümü sağlamadığı için bugünkü ve aylık **yayın maliyeti tahminidir**. İstanbul saatine göre bu panelden başarıyla yayınlanan tüm bağlantılı gönderiler sayılır ve güncel $0,20 birim fiyatla çarpılır. Görsel yükleme, hesap okuma, başarısız/belirsiz istekler ve OpenAI giderleri dahil değildir. Kesin harcamayı X Developer Console'da kontrol edin. Birim fiyat 30.09.2026'da doğrulandı; fiyat değiştiğinde `server/usage.mjs` içindeki fiyat ve kontrol tarihini güncelleyin.
+Giriş yaptıktan sonra **Proje ekle** düğmesinden ürününün HTTPS bağlantısını, adını, platformunu ve **kendin doğruladığın** özellikleri satır satır gir. **URL'den önerileri getir** düğmesine basarsan uygulama yalnızca verdiğin tek herkese açık HTTPS HTML sayfasını okur (tüm siteyi taramaz); metin ve son URL, özellik önerileri için kendi OpenAI API anahtarınla OpenAI'ye gönderilir (ücretli). Bu işlem URL yazınca kendiliğinden başlamaz. Kaynak alıntılarıyla birlikte önerilen alanları incele, yanlış iddiaları düzelt/sil ve doğrulama kutusunu işaretleyerek projeyi kaydet. JavaScript ile yüklenen veya erişim gerektiren sayfalar okunamayabilir; alanları elle doldurabilirsin. Ardından X hesabını bağla. Yeni kurulumlar boş başlar; sadece eski Build & Runs kurulumundaki altı proje eski verilerle beraber aktarılır. İstersen birden çok proje ekleyip taslakları bunlar arasında sırayla oluşturabilirsin.
+
+`npm start` varsayılan olarak yalnızca `127.0.0.1:3000` üzerinde çalıştırır. Günlük üretim etkinse her gün İstanbul saatiyle `.env` içindeki `DRAFT_HOUR` saatinde taslak hazırlar. Yeni sihirbaz/CLI kurulumlarında `SCHEDULE_ENABLED=false` olur; eski kurulumda bu ayar yoksa mevcut otomatik üretim davranışı korunur. Bilgisayar kapalıysa ilk açılışta o günün taslağını hazırlar; üretim başarısız olursa otomatik tekrar denemez. Proje veya OpenAI anahtarı yokken günlük taslak üretilmez. Taslak üretmek, görsel üretmek, hesap bağlamak veya sayfayı yenilemek **yayın yapmaz**. Yayın için bağlı X hesabı ve panelde açık onay gerekir.
+
+## Ücret ve gizlilik
+
+- OpenAI ve X hesaplarını **her kullanıcı kendisi açar, kredi ve limitini kendisi yönetir**. X'e bağlantılı gönderi, medya yükleme, API okuma ve OpenAI çağrıları ücretli olabilir. [X güncel fiyatları](https://docs.x.com/x-api/getting-started/pricing) ve [OpenAI fiyatları](https://openai.com/api/pricing/) yayın öncesi kontrol edilmeli. X Console'da harcama limiti koy.
+- Bakiye kartı X geliştirici hesabının gerçek kalan bakiyesini gösterir; günlük/aylık yayın maliyeti yalnızca bu panelden başarılı URL'li gönderiler için **tahmindir**. Görsel yükleme, OpenAI, başka X uygulamaları, başarısız istekler dahil değildir. Gerçek faturayı ilgili sağlayıcı panellerinde görürsün.
+- `.env`, `data/` ve OAuth tokenları Git dışında kalır. Veri tabanı SQLite'tır; yerel dizini yedekle. Oturum çerezi imzalıdır; parola ve API anahtarlarını kimseyle paylaşma. Tek yönetici / tek süreç tasarlanmıştır; internete açık çok kullanıcılı SaaS olarak kurma.
+- Yayın sırasında sunucu kesilirse olası çift gönderimi önlemek için taslak belirsiz durumda kalır; X hesabındaki gönderileri kontrol etmeden tekrar yayınlanmaz.
+
+## iPhone / Tailscale (isteğe bağlı)
+
+Mac ve iPhone aynı Tailscale ağında olmalı. `tailscale ip -4` ile Mac IP'sini öğren; `.env` içinde `HOST=MAC_TAILSCALE_IP` ve `PUBLIC_BASE_URL=http://MAC_TAILSCALE_IP:3000` yap. Sunucuyu yeniden başlat ve iki cihazda da aynı adresi aç. OAuth hesabını yeniden bağlayacaksan X Console'daki callback listesine `PUBLIC_BASE_URL/api/x/callback` ekle. Alternatif: [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) ile localhost üzerinde HTTPS sun, `HOST=127.0.0.1` bırakıp `PUBLIC_BASE_URL` değerini Serve URL'si yap. Tailscale dışına herkese açık erişim verme; bu panel ayrı kullanıcı hesapları/tenant izolasyonu sağlamaz.
+
+## Mac paketini üretme (geliştirici)
+
+Mac'te Xcode Command Line Tools kurulu olmalı. `npm run package:mac`, resmi Node **v22.23.3** çalışma zamanını nodejs.org üzerinden indirip SHA-256 listesini kontrol eder, AppKit başlatıcısını derler ve `dist/Social Studio.app` ile `dist/Social-Studio-mac-arm64.zip` üretir. Homebrew kitaplıklarına bağlı Node kopyalanmaz. Intel hedefi için `ARCH=x86_64 npm run package:mac` kullanılabilir; Intel çalışma testi henüz yapılmadı. Paket yalnızca `server/`, `public/`, `package.json`, `LICENSE` ve Node runtime/lisansını içerir; `.env`, veritabanı ve tokenlar kopyalanmaz. `dist/` ve `.cache/` Git dışında tutulur. Resmi Node sürümünü güvenlik güncellemelerinde yenileyin.
+
+## Geliştirme ve lisans
+
+[MIT lisansı](LICENSE) ile kullanılabilir ve katkıya açıktır. Paketlenen Node çalışma zamanı kendi lisans ve üçüncü taraf bildirimleriyle gelir. Ürün isimleri/logoları ve X/OpenAI hizmetleri için ilgili haklar ve sağlayıcı şartları geçerlidir; MIT lisansı API erişimi veya kredi sağlamaz.
+
+`npm test` yerel testleri çalıştırır; gerçek API çağrısı ve yayın yapmaz. CI, Linux/macOS üzerinde testleri ve Mac paketinin derlenmesini kontrol eder; otomatik release veya ücretli API kullanımı yoktur. [Katkı rehberi](CONTRIBUTING.md) ve [özel güvenlik bildirimi](SECURITY.md) için bu belgeleri kullanın. Var olan kurulumdan yükseltmede `data/studio.sqlite` yedeğini al: ilk açılış mevcut proje kimliklerini yeni `projects` tablosuna kopyalar, taslaklar ve X bağlantısı korunur. Eski sunucu koduna dönmek için önceki kod sürümüne geçebilirsin; eski kod yeni tabloyu görmez ama eski taslaklar ve tokenları okumaya devam eder. Yeni eklenen projeleri eski kodla kullanma.

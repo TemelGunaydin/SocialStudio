@@ -1,3 +1,4 @@
+import { onboarding } from './onboarding.js';
 const $ = (selector) => document.querySelector(selector);
 let state = null;
 let selectedId = null;
@@ -21,11 +22,11 @@ function toast(message, error = false) {
   toast.timer = setTimeout(() => node.classList.remove('show'), 5000);
 }
 
-async function api(path, method = 'GET', body) {
+async function api(path, method = 'GET', body, extraHeaders = {}) {
   const response = await fetch(path, {
     method,
     credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...extraHeaders },
     body: body ? JSON.stringify(body) : undefined
   });
   const result = await response.json().catch(() => ({}));
@@ -36,6 +37,7 @@ async function api(path, method = 'GET', body) {
 function setLoggedIn(value) {
   $('#login').classList.toggle('hidden', value);
   $('#workspace').classList.toggle('hidden', !value);
+  if (!value) $('#onboarding').close();
 }
 
 async function refresh(preserve = true) {
@@ -64,9 +66,15 @@ function render() {
   $('#metric-pending').textContent = pending;
   $('#nav-pending').textContent = pending;
   $('#metric-published').textContent = published;
-  $('#metric-next').textContent = `${String(state.draftHour).padStart(2, '0')}:00`;
+  $('#metric-next').textContent = state.scheduleEnabled ? `${String(state.draftHour).padStart(2, '0')}:00` : 'Kapalı';
   $('#generation-hint').textContent = state.openaiConfigured ? 'Yapay zekâ ile yeni metin' : 'OPENAI_API_KEY eklenince AI taslakları açılır';
-  $('#generate').disabled = !state.openaiConfigured || busy;
+  $('#generate').disabled = !state.openaiConfigured || !state.catalog.length || busy;
+  $('#manual-open').disabled = !state.catalog.length;
+  $('#project-suggest').disabled = !state.openaiConfigured;
+  if (!$('#project-dialog').open) $('#project-suggest-status').textContent = state.openaiConfigured
+    ? 'OpenAI okuması ücretlendirilir. Önerileri kontrol etmeden kaydetme.'
+    : 'OPENAI_API_KEY yok; proje bilgilerini elle doldurabilirsin.';
+  $('#project-summary').textContent = state.catalog.length ? `${state.catalog.length} proje · Yeni proje ekleyebilir, mevcut taslakları koruyabilirsin.` : 'Önce ürün bağlantısını ve doğrulanmış özelliklerini ekle.';
   $('#app-select').innerHTML = '<option value="">Sıradaki uygulama</option>' + state.catalog.map((app) => `<option value="${app.id}">${escapeHtml(app.name)}</option>`).join('');
   $('#manual-app').innerHTML = state.catalog.map((app) => `<option value="${app.id}">${escapeHtml(app.name)}</option>`).join('');
   renderConnection();
@@ -74,6 +82,7 @@ function render() {
   renderUsage();
   renderList();
   renderReview();
+  setup.update(state);
 }
 
 function renderUsage() {
@@ -129,6 +138,7 @@ function renderBanners() {
   const missing = [];
   if (!state.openaiConfigured) missing.push('OpenAI API anahtarı');
   if (!state.xConfigured) missing.push('X uygulama bilgileri');
+  if (!state.catalog.length) missing.push('tanıtılacak proje');
   $('#setup-banner').classList.toggle('hidden', !missing.length);
   $('#setup-banner').innerHTML = missing.length ? `<span class="banner-icon">✳</span><div><strong>Kurulum tamamlanıyor</strong><p>${escapeHtml(missing.join(' ve '))} henüz ayarlanmadı. Manuel taslak oluşturup paneli inceleyebilirsin.</p></div>` : '';
   const run = state.dailyRun;
@@ -197,14 +207,14 @@ function renderReview() {
       <div class="field-head media-head"><span>Görsel</span><span>İsteğe bağlı</span></div>
       <div class="media-choices ${editable ? '' : 'disabled'}">
         <button data-media="none" class="media-choice ${draft.media_kind === 'none' ? 'active' : ''}" ${editable ? '' : 'disabled'}>Görselsiz</button>
-        <button data-media="icon" class="media-choice ${draft.media_kind === 'icon' ? 'active' : ''}" ${editable ? '' : 'disabled'}>Uygulama ikonu</button>
+        <button data-media="icon" class="media-choice ${draft.media_kind === 'icon' ? 'active' : ''}" ${editable && app.icon !== '/favicon.svg' ? '' : 'disabled'}>Uygulama ikonu</button>
         <button id="image-generate" class="media-choice ${draft.media_kind === 'generated' ? 'active' : ''}" ${editable && state.openaiConfigured ? '' : 'disabled'}>✦ Görsel üret</button>
         <button id="image-upload" class="media-choice ${draft.media_kind === 'uploaded' ? 'active' : ''}" ${editable ? '' : 'disabled'}>▧ Görsel yükle</button>
         <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp" hidden>
       </div>
       ${image ? `<div class="media-preview"><img src="${image}" alt="Seçilen gönderi görseli"><span>${draft.media_kind === 'generated' ? 'AI GÖRSELİ' : draft.media_kind === 'uploaded' ? 'YÜKLENEN GÖRSEL' : 'UYGULAMA İKONU'}</span></div>` : ''}
       <div class="preview-heading"><span class="eyebrow">LIVE PREVIEW</span><span>X üzerinde yaklaşık görünüm</span></div>
-      <div class="post-preview"><div class="preview-avatar">b&r</div><div class="preview-content"><div class="preview-author"><strong>Build & Runs</strong><span>@${escapeHtml(state.xAccount?.username || 'x-hesabin')} · şimdi</span><span class="preview-x">𝕏</span></div><p id="preview-copy">${escapeHtml(draft.text)}</p><a href="${app.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(draft.url)}</a>${image ? `<img src="${image}" class="preview-image" alt="Gönderi görseli">` : ''}<div class="preview-engagement">♡ <span>◌</span> ⇄ <span>↗</span></div></div></div>
+      <div class="post-preview"><div class="preview-avatar">X</div><div class="preview-content"><div class="preview-author"><strong>${escapeHtml(state.xAccount?.name || 'X hesabın')}</strong><span>@${escapeHtml(state.xAccount?.username || 'x-hesabin')} · şimdi</span><span class="preview-x">𝕏</span></div><p id="preview-copy">${escapeHtml(draft.text)}</p><a href="${app.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(draft.url)}</a>${image ? `<img src="${image}" class="preview-image" alt="Gönderi görseli">` : ''}<div class="preview-engagement">♡ <span>◌</span> ⇄ <span>↗</span></div></div></div>
       ${draft.error ? `<div class="draft-error">${escapeHtml(draft.error)}</div>` : ''}
       ${draft.status === 'uncertain' ? '<div class="uncertain-note">X yanıtı kesinleşmedi. Yeni bir gönderi oluşturmadan önce X hesabındaki son paylaşımları kontrol et.</div>' : ''}
       ${draft.status === 'published' && draft.x_post_id ? `<a class="published-link" href="https://x.com/i/web/status/${draft.x_post_id}" target="_blank" rel="noopener noreferrer">X gönderisini aç ↗</a>` : ''}
@@ -318,6 +328,60 @@ $('#generate').addEventListener('click', async () => {
   finally { busy = false; }
 });
 
+$('#project-open').addEventListener('click', () => $('#project-dialog').showModal());
+$('#project-url').addEventListener('input', () => {
+  $('#project-evidence').replaceChildren();
+  $('#project-evidence').classList.add('hidden');
+  $('#project-reviewed').checked = false;
+  $('#project-suggest-status').textContent = 'Bağlantı değişti. Önerileri yeniden getir veya bilgileri elle doğrula.';
+});
+$('#project-suggest').addEventListener('click', async () => {
+  const input = $('#project-url');
+  if (!input.reportValidity()) return;
+  const requested = input.value.trim();
+  const button = $('#project-suggest');
+  button.disabled = true;
+  $('#project-suggest-status').textContent = 'Sayfa okunuyor ve öneriler hazırlanıyor…';
+  try {
+    const { suggestion } = await api('/api/projects/suggest', 'POST', { url: requested });
+    if (!$('#project-dialog').open || input.value.trim() !== requested) return;
+    input.value = suggestion.url;
+    $('#project-name').value = suggestion.name;
+    $('#project-category').value = suggestion.category;
+    $('#project-platform').value = suggestion.platform;
+    $('#project-features').value = suggestion.features.join('\n');
+    $('#project-guardrail').value = suggestion.guardrail;
+    $('#project-reviewed').checked = false;
+    const evidence = $('#project-evidence');
+    evidence.replaceChildren();
+    const title = document.createElement('strong'); title.textContent = 'Kaynakta bulunan alıntılar — iddiaları yine de kontrol et';
+    const list = document.createElement('ul');
+    for (const item of suggestion.evidence) {
+      const row = document.createElement('li'); row.textContent = `“${item.quote}”`; list.append(row);
+    }
+    evidence.append(title, list); evidence.classList.remove('hidden');
+    $('#project-suggest-status').textContent = 'Öneriler hazır. Özellikleri düzenle, alıntıları ve ürün sayfasını karşılaştır.';
+  } catch (error) { $('#project-suggest-status').textContent = error.message; toast(error.message, true); }
+  finally { button.disabled = !state?.openaiConfigured; }
+});
+$('#project-close').addEventListener('click', () => $('#project-dialog').close());
+$('#project-cancel').addEventListener('click', () => $('#project-dialog').close());
+$('#project-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = $('#project-form');
+  const button = form.querySelector('[type="submit"]');
+  button.disabled = true;
+  try {
+    await api('/api/projects', 'POST', {
+      name: $('#project-name').value, url: $('#project-url').value,
+      category: $('#project-category').value, platform: $('#project-platform').value,
+      features: $('#project-features').value, guardrail: $('#project-guardrail').value
+    });
+    form.reset(); $('#project-evidence').replaceChildren(); $('#project-evidence').classList.add('hidden');
+    $('#project-dialog').close(); await refresh(); toast('Proje eklendi. İlk taslağını hazırlayabilirsin.');
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; }
+});
 $('#manual-open').addEventListener('click', () => $('#manual-dialog').showModal());
 $('#manual-close').addEventListener('click', () => $('#manual-dialog').close());
 $('#manual-cancel').addEventListener('click', () => $('#manual-dialog').close());
@@ -333,4 +397,5 @@ const params = new URLSearchParams(location.search);
 if (params.has('x_error')) toast(params.get('x_error'), true);
 if (params.get('x') === 'connected') toast('X hesabı bağlandı.');
 if (params.size) history.replaceState(null, '', '/');
-refresh(false);
+const setup = onboarding({ api, refresh, toast });
+setup.start();

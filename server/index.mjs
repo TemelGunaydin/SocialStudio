@@ -1,27 +1,36 @@
 import process from 'node:process';
 import { createServer } from 'node:http';
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
+import { ownerConfigured, checkPassword, hashPassword, saveConfig, configurationChanges } from './config.mjs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { catalog, getApp } from './catalog.mjs';
+import { parseProject, projectFromRow } from './projects.mjs';
 import { openStore } from './db.mjs';
-import { generateCopy, generateImage } from './openai.mjs';
+import { generateCopy, generateImage, suggestProject } from './openai.mjs';
+import { loadPublicPage } from './site-import.mjs';
 import { connectedAccount, finishConnection, publish, startConnection } from './x.mjs';
 import { createUsageMonitor } from './usage.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-if (existsSync(join(root, '.env'))) process.loadEnvFile(join(root, '.env'));
-const dataDir = resolve(root, process.env.DATA_DIR || './data');
+const home = resolve(process.env.STUDIO_HOME || root);
+const configPath = join(home, '.env');
+if (existsSync(configPath)) process.loadEnvFile(configPath);
+const dataDir = resolve(home, process.env.DATA_DIR || './data');
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
 const draftHour = Number(process.env.DRAFT_HOUR || 10);
 const publicUrl = new URL(process.env.PUBLIC_BASE_URL || `http://localhost:${port}`);
-const adminPassword = process.env.ADMIN_PASSWORD || '';
-const sessionSecret = process.env.SESSION_SECRET || '';
-if (!adminPassword || adminPassword.startsWith('change-this') || sessionSecret.length < 32 || sessionSecret.startsWith('replace-with')) {
-  throw new Error('Güçlü ADMIN_PASSWORD ve en az 32 karakterlik SESSION_SECRET değerlerini .env dosyasına girin.');
+let sessionSecret = process.env.SESSION_SECRET || '';
+let setupToken = ownerConfigured() ? null : randomBytes(32).toString('hex');
+if (!setupToken && (sessionSecret.length < 32 || sessionSecret.startsWith('replace-with'))) {
+  throw new Error('SESSION_SECRET en az 32 rastgele karakter olmalı. Mevcut .env dosyasını kontrol edin.');
 }
+if (setupToken && (host !== '127.0.0.1' || !['localhost', '127.0.0.1'].includes(publicUrl.hostname))) {
+  throw new Error('İlk kurulumu yalnızca HOST=127.0.0.1 ve yerel PUBLIC_BASE_URL ile tamamlayın.');
+}
+process.env.PUBLIC_BASE_URL = publicUrl.origin;
+const scheduleEnabled = () => process.env.SCHEDULE_ENABLED !== 'false';
 if (!Number.isInteger(draftHour) || draftHour < 0 || draftHour > 23) throw new Error('DRAFT_HOUR 0 ile 23 arasında tam sayı olmalı.');
 const store = openStore(dataDir);
 const usage = createUsageMonitor(store);
@@ -62,7 +71,7 @@ function makeSession() {
 
 function authenticated(req) {
   const token = (req.headers.cookie || '').split('; ').find((part) => part.startsWith('studio_session='))?.slice(15);
-  if (!token) return false;
+  if (!token || !ownerConfigured()) return false;
   const [value, mac] = token.split('.');
   if (!value || !mac) return false;
   const expected = signature(value);
@@ -94,17 +103,22 @@ function cleanText(input) {
   return value;
 }
 
+function getApp(id) { return projectFromRow(store.project.get(id)); }
+function catalog() { return store.projects.all().map(projectFromRow); }
 function chooseApp(id) {
   if (id) {
     const app = getApp(id);
-    if (!app) throw Object.assign(new Error('Uygulama bulunamadı.'), { status: 400 });
+    if (!app) throw Object.assign(new Error('Proje bulunamadı.'), { status: 400 });
     return app;
   }
+  const apps = catalog();
+  if (!apps.length) throw Object.assign(new Error('Önce tanıtılacak bir proje ekleyin.'), { status: 400 });
   const last = store.lastApp.get()?.app_id;
-  const index = catalog.findIndex((app) => app.id === last);
-  return catalog[(index + 1) % catalog.length];
+  const index = apps.findIndex((app) => app.id === last);
+  return apps[(index + 1) % apps.length];
 }
 
+let suggestionBusy = false;
 let generationBusy = false;
 async function createDraft(appId, scheduledDate = null) {
   if (generationBusy) throw Object.assign(new Error('Bir taslak zaten üretiliyor. Biraz sonra tekrar deneyin.'), { status: 409 });
@@ -132,7 +146,7 @@ function localDayAndHour() {
 
 let dailyBusy = false;
 async function checkDaily() {
-  if (dailyBusy || generationBusy || !process.env.OPENAI_API_KEY) return;
+  if (!ownerConfigured() || !scheduleEnabled() || dailyBusy || generationBusy || !process.env.OPENAI_API_KEY || !store.projects.all().length) return;
   const { day, hour } = localDayAndHour();
   if (hour < draftHour || store.dailyRun.get(day)) return;
   const start = store.dailyStart.run(day, now());
@@ -153,27 +167,48 @@ function serveFile(res, path, contentType) {
     'Content-Type': contentType,
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
     'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://buildandruns.com https://www.buildandruns.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
   });
   res.end(bytes);
 }
 
+let xConnectionBusy = false;
 async function handle(req, res) {
+  if (req.headers.host !== publicUrl.host) return fail(res, 403, 'Paneli yapılandırılmış adresinden açın.');
   const url = new URL(req.url, publicUrl);
   const path = url.pathname;
   if (req.method === 'GET' && path === '/') return serveFile(res, join(publicDir, 'index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && path === '/app.js') return serveFile(res, join(publicDir, 'app.js'), 'text/javascript; charset=utf-8');
+  if (req.method === 'GET' && path === '/onboarding.js') return serveFile(res, join(publicDir, 'onboarding.js'), 'text/javascript; charset=utf-8');
+  if (req.method === 'GET' && path === '/onboarding.css') return serveFile(res, join(publicDir, 'onboarding.css'), 'text/css; charset=utf-8');
+  if (req.method === 'GET' && path === '/api/health') return reply(res, 200, { service: 'social-studio' });
+  if (req.method === 'GET' && path === '/api/setup/status') return reply(res, 200, { needsOwner: !ownerConfigured() });
   if (req.method === 'GET' && path === '/style.css') return serveFile(res, join(publicDir, 'style.css'), 'text/css; charset=utf-8');
   if (req.method === 'GET' && path === '/favicon.svg') return serveFile(res, join(publicDir, 'favicon.svg'), 'image/svg+xml');
 
   if (req.method !== 'GET' && !sameOrigin(req)) return fail(res, 403, 'İstek kaynağı doğrulanamadı. PUBLIC_BASE_URL adresini kontrol edin.');
 
+  if (req.method === 'POST' && path === '/api/setup/owner') {
+    if (!setupToken || ownerConfigured()) return fail(res, 409, 'Kurulum zaten tamamlandı. Giriş yapın.');
+    if (!['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)
+        || !safeEqual(String(req.headers['x-setup-token'] || ''), setupToken)) return fail(res, 403, 'Uygulamanın açtığı kurulum bağlantısını kullanın.');
+    const input = await readJson(req, 2048);
+    if (!setupToken || ownerConfigured()) return fail(res, 409, 'Kurulum zaten tamamlandı. Giriş yapın.');
+    const hash = hashPassword(input?.password);
+    const secret = randomBytes(48).toString('base64url');
+    saveConfig(configPath, { ADMIN_PASSWORD_HASH: hash, SESSION_SECRET: secret,
+      PUBLIC_BASE_URL: publicUrl.origin, HOST: host, PORT: String(port), SCHEDULE_ENABLED: 'false' });
+    sessionSecret = secret;
+    setupToken = null;
+    return reply(res, 201, { ok: true }, { 'Set-Cookie': `studio_session=${makeSession()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600` });
+  }
   if (req.method === 'POST' && path === '/api/login') {
     const ip = req.socket.remoteAddress || 'unknown';
     const attempt = loginAttempts.get(ip) || { count: 0, until: 0 };
     if (attempt.until > Date.now()) return fail(res, 429, 'Çok fazla deneme. Biraz sonra tekrar deneyin.');
     const { password } = await readJson(req, 2048);
-    if (!safeEqual(String(password || ''), adminPassword)) {
+    if (!ownerConfigured() || !checkPassword(String(password || ''))) {
       attempt.count += 1;
       if (attempt.count >= 5) { attempt.until = Date.now() + 15 * 60_000; attempt.count = 0; }
       loginAttempts.set(ip, attempt);
@@ -192,12 +227,46 @@ async function handle(req, res) {
   if (req.method === 'GET' && path === '/api/state') {
     const { day } = localDayAndHour();
     return reply(res, 200, {
-      drafts: store.list.all(), catalog, xAccount: connectedAccount(store),
+      drafts: store.list.all(), catalog: catalog(), xAccount: connectedAccount(store),
       openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
       xConfigured: Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET),
       dailyRun: store.dailyRun.get(day) || null,
-      draftHour, usage: usage.summary()
+      draftHour, scheduleEnabled: scheduleEnabled(), callbackUrl: `${publicUrl.origin}/api/x/callback`, usage: usage.summary()
     });
+  }
+  if (req.method === 'POST' && path === '/api/settings') {
+    if (generationBusy || suggestionBusy || dailyBusy || xConnectionBusy || store.list.all().some((draft) => draft.status === 'publishing')) {
+      return fail(res, 409, 'Devam eden işlemin bitmesini bekleyip ayarları yeniden kaydedin.');
+    }
+    const changes = configurationChanges(await readJson(req, 8000));
+    const xChanged = ['X_CLIENT_ID', 'X_CLIENT_SECRET'].some((key) => changes[key] !== undefined && changes[key] !== process.env[key]);
+    saveConfig(configPath, changes);
+    if (xChanged) {
+      store.deleteSetting.run('x_token'); store.deleteSetting.run('x_credits');
+      store.db.prepare("DELETE FROM settings WHERE key LIKE 'oauth:%'").run();
+      usage.invalidate();
+    }
+    return reply(res, 200, { ok: true, reconnectX: xChanged });
+  }
+  if (req.method === 'POST' && path === '/api/projects/suggest') {
+    if (!process.env.OPENAI_API_KEY) return fail(res, 400, 'Öneri almak için OPENAI_API_KEY gerekli. Projeyi elle ekleyebilirsin.');
+    if (suggestionBusy) return fail(res, 409, 'Başka bir sayfa okunuyor; biraz sonra tekrar dene.');
+    const { url: input } = await readJson(req, 2500);
+    suggestionBusy = true;
+    try {
+      const { url: source, text } = await loadPublicPage(input);
+      return reply(res, 200, { suggestion: await suggestProject(source, text) });
+    } finally { suggestionBusy = false; }
+  }
+  if (req.method === 'POST' && path === '/api/projects') {
+    const input = await readJson(req, 16_000);
+    let app;
+    try { app = parseProject(input); }
+    catch (error) { return fail(res, 400, error.message); }
+    const id = randomUUID();
+    store.addProject.run(id, app.name, app.category, app.platform, app.url,
+      app.icon, app.color, JSON.stringify(app.features), app.guardrail);
+    return reply(res, 201, { project: getApp(id) });
   }
   if (req.method === 'GET' && path === '/api/usage') {
     return reply(res, 200, { usage: await usage.refresh() });
@@ -210,6 +279,8 @@ async function handle(req, res) {
     return res.end();
   }
   if (req.method === 'GET' && path === '/api/x/callback') {
+    if (xConnectionBusy) return fail(res, 409, 'X bağlantısı zaten işleniyor.');
+    xConnectionBusy = true;
     try {
       await finishConnection(store, url.searchParams.get('state'), url.searchParams.get('code'));
       store.deleteSetting.run('x_credits');
@@ -217,7 +288,7 @@ async function handle(req, res) {
       res.writeHead(302, { Location: '/?x=connected' });
     } catch (error) {
       res.writeHead(302, { Location: `/?x_error=${encodeURIComponent(error.message)}` });
-    }
+    } finally { xConnectionBusy = false; }
     return res.end();
   }
   if (req.method === 'POST' && path === '/api/x/disconnect') {
@@ -251,6 +322,7 @@ async function handle(req, res) {
       const text = cleanText(input.text);
       const kind = input.mediaKind || 'none';
       if (!['none', 'icon', 'generated', 'uploaded'].includes(kind)) return fail(res, 400, 'Geçersiz görsel seçimi.');
+      if (kind === 'icon' && getApp(draft.app_id)?.icon === '/favicon.svg') return fail(res, 400, 'Bu proje için ikon yok; görsel yükleyin veya görselsiz yayınlayın.');
       if (['generated', 'uploaded'].includes(kind) && !draft.media_path) return fail(res, 400, 'Önce görsel oluşturun veya yükleyin.');
       store.edit.run(text, kind, draft.media_path, draft.media_alt, now(), id);
       return reply(res, 200, { draft: store.get.get(id) });
@@ -316,7 +388,11 @@ const server = createServer((req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Social Studio: ${publicUrl.origin}`);
+  const launchUrl = `${publicUrl.origin}/${setupToken ? `#setup=${setupToken}` : ''}`;
+  // Only the local launcher receives the one-use setup token; never expose it via HTTP.
+  if (process.env.STUDIO_READY_FILE) {
+    writeFileSync(process.env.STUDIO_READY_FILE, JSON.stringify({ url: launchUrl }), { mode: 0o600 });
+  } else console.log(`Social Studio: ${launchUrl}`);
   setTimeout(checkDaily, 2000).unref();
   setInterval(checkDaily, 60_000).unref();
 });
