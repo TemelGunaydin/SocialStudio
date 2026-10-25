@@ -12,7 +12,7 @@ Social Studio kendi bilgisayarında çalışır. Her kullanıcı kendi X Develop
 
 Console'da uygulamanı oluştur veya mevcut olanı seç. İsim sana ait olabilir, örneğin “My Social Studio”. Kullanım açıklaması istenirse aşağıdaki metni **gerçek kullanımına göre** düzenle; şartları kendin inceleyip kabul et:
 
-> I use this local app to manage my own X account and promote my products or services. It uses OAuth to read my basic account profile, upload optional images and publish posts only after I review and approve them. Drafts may be generated with AI from product information I provide. OAuth tokens are stored on my computer. I do not collect other users' data or use X data to train AI models.
+> I use this local app to manage my own X accounts and promote my products or services. It uses OAuth to read my basic account profile, upload optional images or videos, and publish posts after I approve them or explicitly enable recurring publishing. Drafts may be generated with AI from product information I provide. OAuth tokens are stored on my computer. I do not collect other users' data or use X data to train AI models.
 
 ## 2. Kullanıcı yetkilendirmesini aç
 
@@ -20,7 +20,7 @@ Uygulama ayarlarında **User authentication settings** / **Set up** veya **Edit*
 
 - OAuth 2.0'ı etkinleştir.
 - Uygulama tipi: **Web App** (confidential client). Uygulama bilgisayarında çalışsa da Client Secret'ı tarayıcıda değil yerel sunucuda tutar.
-- Callback / Redirect URI: Social Studio → **Kurulum ve bağlantılar → X hesabı** bölümündeki adresi kopyala. Varsayılan: `http://localhost:3000/api/x/callback`.
+- Callback / Redirect URI: Social Studio → **API ve modeller → Twitter / X** bölümündeki **Callback / yönlendirme adresi** değerini kopyala. Varsayılan: `http://localhost:3000/api/x/callback`.
 - Website URL: kendi herkese açık HTTPS ürün siteni gir. Bu alan callback değildir.
 - Kaydet; sonra **Keys and tokens** bölümüne geri dön.
 
@@ -38,11 +38,15 @@ Callback eşleşmesi **birebir** olmalı. `localhost` ile `127.0.0.1`, `http` il
 
 Client Secret yalnızca ilk oluşturulduğunda gösterilebilir. Kaybettiysen Console'dan yenile; yeni değeri panelde kaydet ve hesabı tekrar bağla. Anahtarları sohbete, GitHub issue'suna veya ekran görüntüsüne koyma.
 
-Kaydetme API çağrısı yapmaz ve değerlerin çalıştığını doğrulamaz. Boş alanlar eski değeri korur. Kimlik bilgileri değişirse önceki X bağlantısı kesilir.
+Kaydetme API çağrısı yapmaz ve değerlerin çalıştığını doğrulamaz. Boş alanlar eski değeri korur. Geliştirici uygulaması bilgileri değişirse bağlı X hesaplarını yeniden yetkilendirmen gerekir.
 
 ## 4. X izin ekranını aç
 
-Panelde **X izin ekranını aç** düğmesine bas. X'in gösterdiği hesabı ve izinleri kontrol et; doğruysa yetkilendir. Panelde `@kullanıcıadın` bağlı görünmeli. Bu sırada temel hesap okuma isteği yapılır; X'in fiyatlandırmasına tabi olabilir. Hiçbir tweet yayınlanmaz. İlk gönderi ancak taslağı inceleyip **Onayla ve yayınla** dediğinde yayınlanır.
+**Sosyal hesaplar → Twitter / X → Twitter / X hesabı bağla** düğmesine bas. X'in gösterdiği hesabı ve izinleri kontrol et; doğruysa yetkilendir. Panelde kullanıcı adın bağlı görünmeli. Bu sırada temel hesap okuma isteği yapılır; X'in fiyatlandırmasına tabi olabilir. Hesap bağlamak tweet yayınlamaz.
+
+İkinci bir X hesabı için aynı işlemi tekrarla ve X izin ekranında o hesaba giriş yap. Her hesabın izni ayrı saklanır. Aynı hesabı tekrar bağlamak diğer hesapları silmeden o hesabın iznini yeniler.
+
+İlk paylaşımını **İçerik stüdyosu** sayfasında hazırlayıp **Şimdi paylaş** ile yayınlayabilir veya ileri bir zamana planlayabilirsin. Düzenli otomatik paylaşım istiyorsan **Otomatik akış** sayfasında ayrıca izin verip etkinleştirmen gerekir.
 
 ## Sorun giderme
 

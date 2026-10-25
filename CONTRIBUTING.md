@@ -7,7 +7,7 @@ Thanks for helping make Social Studio easier to use. The current application and
 1. Install Node.js 22.13 or newer.
 2. Clone the repository. No npm dependencies need installing.
 3. Run `npm test`. Tests use temporary data and fake provider responses; do not add real keys to test fixtures.
-4. Run `npm start` and open the complete first-run URL shown in your terminal. Set a local owner password and follow the in-app setup guide.
+4. Run `npm start` and open the complete first-run URL shown in your terminal. Set a local owner password, then configure **API ve modeller** and **Sosyal hesaplar**. See the [getting-started guide](README.md#connect-ai-and-your-social-accounts).
 
 ```sh
 git clone https://github.com/TemelGunaydin/SocialStudio.git
@@ -21,7 +21,7 @@ macOS packaging requires Xcode Command Line Tools: `npm run package:mac`. It dow
 ## Pull requests
 
 - Keep changes focused and explain the user problem and how you verified the result.
-- Add regression tests for changed behavior. Preserve existing data, X connections and explicit publishing approval.
+- Add regression tests for changed behavior. Preserve existing data and account connections, approval for individual posts, and explicit opt-in for recurring publishing.
 - Do not introduce live paid API calls into tests or CI. Mock provider responses. Do not publish real posts while testing.
 - Preserve first-run protection, local-only defaults, source review and paid-generation opt-in.
 - Never commit `.env`, token files, SQLite data, generated media, local logs or built app bundles. Use anonymized examples/screenshots.

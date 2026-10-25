@@ -11,11 +11,11 @@ Include the affected version/commit, operating system, impact and reproduction s
 ## Security boundaries
 
 - The default server listens only on `127.0.0.1`. First-owner setup requires the local, single-use setup link. Keep it private.
-- Authentication and same-origin checks protect configuration and publishing. Publishing always requires an explicit owner action.
-- New owner passwords are salted scrypt hashes. API keys and X OAuth tokens are **not encrypted at rest**: protect your OS account, enable disk encryption and restrict backups. Legacy `.env` passwords remain compatible and may be plaintext.
+- Authentication and same-origin checks protect configuration and publishing. Immediate and scheduled posts require owner approval. Recurring X/YouTube posts can publish automatically after the owner explicitly enables that flow.
+- New owner passwords are salted scrypt hashes. API keys and social-account OAuth tokens are **not encrypted at rest**: protect your OS account, enable disk encryption and restrict backups. Legacy `.env` passwords remain compatible and may be plaintext.
 - New installations disable scheduled paid generation until the owner enables it. Keys are saved locally; saving is not a live credential test.
 - URL import accepts public HTTPS HTML pages, checks DNS/redirect destinations and bounds the response. Imported text remains untrusted; source quotes do not prove an AI claim is true. Review all claims before saving or publishing.
-- OpenAI receives page text for requested imports and project data for requested generation. X receives approved posts/media and OAuth/account requests. Review each provider's terms and privacy policy.
+- OpenAI receives page text for requested imports, context/project data for generation, and candidate filenames for AI video selection. Enabled recurring flows also send the data needed for their generation requests. X, YouTube, and TikTok receive the selected posts/media and account authorization requests. Review each provider's terms and privacy policy.
 - The app does not enforce a monetary spending cap. Configure provider-side limits and review billing yourself.
 
 Do not expose this server to the public internet, disable TLS validation, use shared API keys, or grant broader X scopes to work around an error. Tailscale access is for trusted devices only, not a substitute for multi-user isolation.
