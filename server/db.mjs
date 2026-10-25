@@ -30,12 +30,41 @@ export function openStore(dataDir) {
       x_post_id TEXT,
       error TEXT
     );
+    CREATE TABLE IF NOT EXISTS linkedin_drafts (
+      draft_id TEXT PRIMARY KEY REFERENCES drafts(id) ON DELETE CASCADE,
+      text TEXT NOT NULL, video_name TEXT NOT NULL DEFAULT '',
+      revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tiktok_drafts (
+      draft_id TEXT PRIMARY KEY REFERENCES drafts(id) ON DELETE CASCADE,
+      text TEXT NOT NULL, video_name TEXT NOT NULL DEFAULT '',
+      revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
       platform TEXT NOT NULL, url TEXT NOT NULL, icon TEXT NOT NULL,
       color TEXT NOT NULL, features TEXT NOT NULL, guardrail TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS social_accounts (
+      id TEXT PRIMARY KEY, platform TEXT NOT NULL, remote_id TEXT NOT NULL,
+      name TEXT NOT NULL, username TEXT NOT NULL, token TEXT NOT NULL,
+      UNIQUE(platform, remote_id)
+    );
+    CREATE TABLE IF NOT EXISTS media_library (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, source_path TEXT UNIQUE,
+      stored_name TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available', created_at TEXT NOT NULL, error TEXT
+    );
+    CREATE TABLE IF NOT EXISTS social_posts (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, platform TEXT NOT NULL,
+      account_id TEXT REFERENCES social_accounts(id) ON DELETE SET NULL,
+      context TEXT NOT NULL, model TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+      text TEXT NOT NULL DEFAULT '', media_id TEXT REFERENCES media_library(id),
+      options TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'draft',
+      scheduled_at TEXT, remote_id TEXT, remote_url TEXT, error TEXT,
+      revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY, result TEXT NOT NULL, error TEXT, created_at TEXT NOT NULL);
   `);
   // Expand-only migration: old drafts keep their project IDs; new installs start empty.
@@ -60,6 +89,7 @@ export function openStore(dataDir) {
   // Never retry such a draft automatically because that can publish a duplicate.
   db.prepare(`UPDATE drafts SET status = 'uncertain', error = 'Sunucu yayın sırasında durdu. X hesabındaki son gönderiyi kontrol edin.' WHERE status = 'publishing'`).run();
   db.prepare(`UPDATE daily_runs SET result = 'failed', error = 'Sunucu taslak üretimi sırasında durdu.' WHERE result = 'running'`).run();
+  db.prepare(`UPDATE social_posts SET status = 'uncertain', error = 'Sunucu yayın sırasında durdu. Tekrar yayınlamadan önce hesabı kontrol edin.' WHERE status = 'publishing'`).run();
   const statements = {
     projects: db.prepare('SELECT * FROM projects ORDER BY rowid'),
     project: db.prepare('SELECT * FROM projects WHERE id = ?'),
@@ -67,6 +97,16 @@ export function openStore(dataDir) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     list: db.prepare('SELECT * FROM drafts ORDER BY created_at DESC LIMIT 120'),
     get: db.prepare('SELECT * FROM drafts WHERE id = ?'),
+    linkedIn: db.prepare('SELECT * FROM linkedin_drafts WHERE draft_id = ?'),
+    createLinkedIn: db.prepare(`INSERT INTO linkedin_drafts (draft_id, text, video_name, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(draft_id) DO NOTHING`),
+    editLinkedIn: db.prepare(`UPDATE linkedin_drafts SET text = ?, video_name = ?, updated_at = ?, revision = revision + 1
+      WHERE draft_id = ? AND revision = ?`),
+    tikTok: db.prepare('SELECT * FROM tiktok_drafts WHERE draft_id = ?'),
+    createTikTok: db.prepare(`INSERT INTO tiktok_drafts (draft_id, text, video_name, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(draft_id) DO NOTHING`),
+    editTikTok: db.prepare(`UPDATE tiktok_drafts SET text = ?, video_name = ?, updated_at = ?, revision = revision + 1
+      WHERE draft_id = ? AND revision = ?`),
     create: db.prepare(`INSERT INTO drafts
       (id, app_id, feature, text, url, scheduled_date, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),

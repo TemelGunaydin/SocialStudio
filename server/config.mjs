@@ -42,7 +42,7 @@ export function saveConfig(path, changes, env = process.env) {
 export function configurationChanges(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw bad('Ayarlar geçersiz.');
   const changes = {};
-  for (const key of ['OPENAI_API_KEY', 'X_CLIENT_ID', 'X_CLIENT_SECRET']) {
+  for (const key of ['OPENAI_API_KEY', 'X_CLIENT_ID', 'X_CLIENT_SECRET', 'YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET', 'TIKTOK_CLIENT_ID', 'TIKTOK_CLIENT_SECRET']) {
     if (input[key] === undefined || input[key] === '') continue; // Blank means keep, never erase a working key.
     if (typeof input[key] !== 'string' || !/^[A-Za-z0-9_~.+\/=-]{4,2048}$/.test(input[key])) throw bad(`${key} değerini başında/sonunda boşluk olmadan yapıştırın.`);
     changes[key] = input[key];

@@ -9,6 +9,26 @@
 @media(max-width:850px){.connection-card,.connection-card:has(.connection-account){display:block;position:static;width:auto;margin:13px 0 0;box-shadow:none}.connection-card .connection-account{margin:10px 0}.connection-card p{margin:8px 0}.connection-card .connection-action{padding-top:8px}}
 @media(max-width:580px){.connection-card{width:auto}}
 
+.preview-video{display:block;width:100%;max-height:330px;margin-top:12px;border-radius:9px;background:#172b29}
+.video-hint{font-size:11px;color:#61776b;line-height:1.6;margin:10px 0}
+.manual-platform-actions{display:flex;flex-wrap:wrap;gap:8px}
+.linkedin-launch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;border:1px solid #dfe7df;border-radius:11px;margin-bottom:20px;background:#fafbf8}
+.linkedin-launch strong{font-size:12px}.linkedin-launch p{font-size:11px;color:#61776b;line-height:1.5;margin:5px 0 0}.linkedin-launch .button{flex:none}
+.linkedin-editor{width:min(650px,calc(100vw - 32px))}
+.linkedin-editor .modal-head{margin-bottom:12px}.linkedin-editor .modal-head p{margin-bottom:0}
+.linkedin-editor .field-head{margin-top:18px;gap:12px;flex-wrap:wrap}.linkedin-editor .field-head label{margin:0}
+.linkedin-editor textarea{font-size:13px;margin-bottom:0;min-height:200px}
+.linkedin-note{font-size:11px;color:#61776b;line-height:1.6;margin:9px 0 14px;overflow-wrap:anywhere}
+.linkedin-video-section{border-top:1px solid #e4ebe3;border-bottom:1px solid #e4ebe3;padding-top:16px;margin:18px 0}
+.linkedin-video-section h3{font-size:12px;margin-bottom:12px}.linkedin-video-section h3 small{font-weight:400;color:#61776b;margin-left:8px}
+.linkedin-video-actions{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.linkedin-editor video{display:block;width:100%;max-height:300px;background:#172b29;border-radius:9px}
+.linkedin-editor video[hidden]{display:none}.linkedin-editor .modal-actions{flex-wrap:wrap;justify-content:flex-start}
+.linkedin-editor .button{text-decoration:none}.linkedin-feedback{font-size:12px;line-height:1.6;color:#355345;overflow-wrap:anywhere;min-height:20px}
+.linkedin-editor :focus-visible{outline:2px solid #52845b;outline-offset:3px}
+@media(max-width:580px){.linkedin-launch{align-items:flex-start;flex-direction:column}.linkedin-editor{padding:20px}.linkedin-editor .modal-actions .button{flex:1 1 auto}}
+
+
 .usage-panel{margin-bottom:28px;padding:23px 25px;border:1px solid #e1e9df;border-radius:15px;background:#fff}
 .usage-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:19px}
 .usage-heading h2{font:800 19px Manrope,sans-serif;letter-spacing:-.4px;margin:5px 0 0}

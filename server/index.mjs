@@ -7,10 +7,15 @@ import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseProject, projectFromRow } from './projects.mjs';
 import { openStore } from './db.mjs';
-import { generateCopy, generateImage, suggestProject } from './openai.mjs';
+import { generateCopy, generateImage, generateLinkedInCopy, generateTikTokCopy, suggestProject } from './openai.mjs';
+import { linkedInInput } from './linkedin.mjs';
 import { loadPublicPage } from './site-import.mjs';
 import { connectedAccount, finishConnection, publish, startConnection } from './x.mjs';
 import { createUsageMonitor } from './usage.mjs';
+import { saveVideo, serveVideo } from './video.mjs';
+import { unlink } from 'node:fs/promises';
+import { createSocialStudio } from './social.mjs';
+import { upsertAccount } from './social-platforms.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const home = resolve(process.env.STUDIO_HOME || root);
@@ -49,6 +54,9 @@ function reply(res, status, body, headers = {}) {
 }
 
 function fail(res, status, message) { reply(res, status, { error: message }); }
+
+const social = createSocialStudio({ store, dataDir, configPath, readJson, reply,
+  isConfigBusy: () => generationBusy || suggestionBusy || dailyBusy || xConnectionBusy || store.list.all().some(draft => draft.status === 'publishing') });
 
 async function readJson(req, maxBytes = 8_000_000) {
   let size = 0;
@@ -168,18 +176,21 @@ function serveFile(res, path, contentType) {
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://buildandruns.com https://www.buildandruns.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://buildandruns.com https://www.buildandruns.com; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'"
   });
   res.end(bytes);
 }
 
 let xConnectionBusy = false;
+const draftOperations = new Set();
 async function handle(req, res) {
   if (req.headers.host !== publicUrl.host) return fail(res, 403, 'Paneli yapılandırılmış adresinden açın.');
   const url = new URL(req.url, publicUrl);
   const path = url.pathname;
   if (req.method === 'GET' && path === '/') return serveFile(res, join(publicDir, 'index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && path === '/app.js') return serveFile(res, join(publicDir, 'app.js'), 'text/javascript; charset=utf-8');
+  if (req.method === 'GET' && ['/studio.js', '/studio.css'].includes(path)) return serveFile(res, join(publicDir, path.slice(1)), path.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8');
+  if (req.method === 'GET' && path === '/linkedin.js') return serveFile(res, join(publicDir, 'linkedin.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && path === '/onboarding.js') return serveFile(res, join(publicDir, 'onboarding.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && path === '/onboarding.css') return serveFile(res, join(publicDir, 'onboarding.css'), 'text/css; charset=utf-8');
   if (req.method === 'GET' && path === '/api/health') return reply(res, 200, { service: 'social-studio' });
@@ -221,6 +232,8 @@ async function handle(req, res) {
 
   if (!authenticated(req)) return fail(res, 401, 'Oturum açın.');
 
+  if (await social.handle(req, res, url)) return;
+
   if (req.method === 'POST' && path === '/api/logout') {
     return reply(res, 200, { ok: true }, { 'Set-Cookie': `studio_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${publicUrl.protocol === 'https:' ? '; Secure' : ''}` });
   }
@@ -235,13 +248,14 @@ async function handle(req, res) {
     });
   }
   if (req.method === 'POST' && path === '/api/settings') {
-    if (generationBusy || suggestionBusy || dailyBusy || xConnectionBusy || store.list.all().some((draft) => draft.status === 'publishing')) {
+    if (generationBusy || suggestionBusy || dailyBusy || xConnectionBusy || social.isBusy || store.list.all().some((draft) => draft.status === 'publishing')) {
       return fail(res, 409, 'Devam eden işlemin bitmesini bekleyip ayarları yeniden kaydedin.');
     }
     const changes = configurationChanges(await readJson(req, 8000));
     const xChanged = ['X_CLIENT_ID', 'X_CLIENT_SECRET'].some((key) => changes[key] !== undefined && changes[key] !== process.env[key]);
     saveConfig(configPath, changes);
     if (xChanged) {
+      store.db.prepare("DELETE FROM social_accounts WHERE platform='x'").run();
       store.deleteSetting.run('x_token'); store.deleteSetting.run('x_credits');
       store.db.prepare("DELETE FROM settings WHERE key LIKE 'oauth:%'").run();
       usage.invalidate();
@@ -283,6 +297,8 @@ async function handle(req, res) {
     xConnectionBusy = true;
     try {
       await finishConnection(store, url.searchParams.get('state'), url.searchParams.get('code'));
+      const token = JSON.parse(store.getSetting.get('x_token').value);
+      upsertAccount(store, 'x', token.user.id, token.user.name, token.user.username, token);
       store.deleteSetting.run('x_credits');
       usage.invalidate();
       res.writeHead(302, { Location: '/?x=connected' });
@@ -315,62 +331,106 @@ async function handle(req, res) {
     const action = match[2] || '';
     const draft = store.get.get(id);
     if (!draft) return fail(res, 404, 'Taslak bulunamadı.');
+    // Manual handoffs are independent of X status, even after X publication.
+    const tiktok = action === 'tiktok' || action === 'tiktok/generate';
+    const platform = tiktok ? 'tiktok' : 'linkedin';
+    const label = tiktok ? 'TikTok' : 'LinkedIn';
+    const handoff = tiktok ? { get: store.tikTok, create: store.createTikTok, edit: store.editTikTok }
+      : { get: store.linkedIn, create: store.createLinkedIn, edit: store.editLinkedIn };
+    if (action === 'linkedin' || action === 'tiktok') {
+      if (req.method === 'GET') {
+        return reply(res, 200, { [platform]: handoff.get.get(id) || {
+          draft_id: id, text: `${draft.text}\n\n${draft.url}`, video_name: '', revision: 0, updated_at: null
+        } });
+      }
+      if (req.method !== 'POST') return fail(res, 405, 'Yöntem desteklenmiyor.');
+      const { text, videoName, revision } = linkedInInput(await readJson(req, 16_000), tiktok ? 2200 : 3000, label);
+      const saved = revision === 0 ? handoff.create.run(id, text, videoName, now())
+        : handoff.edit.run(text, videoName, now(), id, revision);
+      if (!saved.changes) return fail(res, 409, `${label} taslağı başka bir sekmede değişti. Metnini kopyalayarak koru, sonra taslağı yeniden aç.`);
+      return reply(res, 200, { [platform]: handoff.get.get(id) });
+    }
     if (req.method !== 'POST') return fail(res, 405, 'Yöntem desteklenmiyor.');
-    if (draft.status !== 'draft') return fail(res, 409, 'Bu taslak artık düzenlenemez.');
-    if (action === '') {
-      const input = await readJson(req, 5000);
-      const text = cleanText(input.text);
-      const kind = input.mediaKind || 'none';
-      if (!['none', 'icon', 'generated', 'uploaded'].includes(kind)) return fail(res, 400, 'Geçersiz görsel seçimi.');
-      if (kind === 'icon' && getApp(draft.app_id)?.icon === '/favicon.svg') return fail(res, 400, 'Bu proje için ikon yok; görsel yükleyin veya görselsiz yayınlayın.');
-      if (['generated', 'uploaded'].includes(kind) && !draft.media_path) return fail(res, 400, 'Önce görsel oluşturun veya yükleyin.');
-      store.edit.run(text, kind, draft.media_path, draft.media_alt, now(), id);
-      return reply(res, 200, { draft: store.get.get(id) });
-    }
-    if (action === 'image/generate') {
-      const app = getApp(draft.app_id);
-      const filename = await generateImage(draft, app, dataDir);
-      store.edit.run(draft.text, 'generated', filename, null, now(), id);
-      return reply(res, 200, { draft: store.get.get(id) });
-    }
-    if (action === 'image/upload') {
-      const input = await readJson(req, 8_000_000);
-      const types = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
-      const ext = types[input.type];
-      if (!ext || typeof input.base64 !== 'string') return fail(res, 400, 'PNG, JPEG veya WebP yükleyin.');
-      const bytes = Buffer.from(input.base64, 'base64');
-      if (!bytes.length || bytes.length > 5_000_000) return fail(res, 400, 'Görsel 5 MB altında olmalı.');
-      const valid = (ext === 'png' && bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))
-        || (ext === 'jpg' && bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex')))
-        || (ext === 'webp' && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP');
-      if (!valid) return fail(res, 400, 'Görsel dosyası doğrulanamadı.');
-      const imageDir = join(dataDir, 'images');
-      mkdirSync(imageDir, { recursive: true, mode: 0o700 });
-      const filename = `${id}-upload.${ext}`;
-      writeFileSync(join(imageDir, filename), bytes, { mode: 0o600 });
-      store.edit.run(draft.text, 'uploaded', filename, null, now(), id);
-      return reply(res, 200, { draft: store.get.get(id) });
-    }
-    if (action === 'reject') {
-      store.reject.run(now(), id);
-      return reply(res, 200, { draft: store.get.get(id) });
-    }
-    if (action === 'publish') {
-      if (!connectedAccount(store)) return fail(res, 400, 'Önce X hesabını bağlayın.');
-      cleanText(draft.text);
-      const stamp = now();
-      if (!store.markPublishing.run(stamp, stamp, id).changes) return fail(res, 409, 'Taslak zaten işleniyor.');
+    if (action === 'linkedin/generate' || action === 'tiktok/generate') {
+      if (!process.env.OPENAI_API_KEY) return fail(res, 400, `AI için OpenAI anahtarı gerekli. ${label} metnini ücretsiz olarak elle düzenleyebilirsin.`);
+      if (generationBusy) return fail(res, 409, 'Bir taslak zaten üretiliyor. Biraz sonra tekrar deneyin.');
+      generationBusy = true;
       try {
-        const xId = await publish(store, draft, dataDir);
-        store.markPublished.run(xId, now(), now(), id);
-        return reply(res, 200, { draft: store.get.get(id) });
-      } catch (error) {
-        store.markFailed.run(error.uncertain ? 'uncertain' : 'draft', error.message, now(), id);
-        throw error;
-      } finally { usage.invalidate(); }
+        // Suggestions do not overwrite saved text. The owner must review and save explicitly.
+        return reply(res, 200, { text: await (tiktok ? generateTikTokCopy : generateLinkedInCopy)(getApp(draft.app_id), draft) });
+      } finally { generationBusy = false; }
     }
-    return fail(res, 404, 'İşlem bulunamadı.');
+    if (draft.status !== 'draft') return fail(res, 409, 'Bu taslak artık düzenlenemez.');
+    if (draftOperations.has(id)) return fail(res, 409, 'Bu taslakta bir işlem sürüyor; bitmesini bekleyin.');
+    draftOperations.add(id);
+    try {
+      if (action === '') {
+        const input = await readJson(req, 5000);
+        const text = cleanText(input.text);
+        const kind = input.mediaKind || 'none';
+        if (!['none', 'icon', 'generated', 'uploaded', 'video'].includes(kind)) return fail(res, 400, 'Geçersiz medya seçimi.');
+        if (kind === 'icon' && getApp(draft.app_id)?.icon === '/favicon.svg') return fail(res, 400, 'Bu proje için ikon yok; görsel yükleyin veya görselsiz yayınlayın.');
+        if (['generated', 'uploaded'].includes(kind) && !/\.(jpg|png|webp)$/.test(draft.media_path || '')) return fail(res, 400, 'Önce görsel oluşturun veya yükleyin.');
+        if (kind === 'video' && !/^[a-f0-9-]{36}\.mp4$/.test(draft.media_path || '')) return fail(res, 400, 'Önce video seçin.');
+        store.edit.run(text, kind, draft.media_path, draft.media_alt, now(), id);
+        return reply(res, 200, { draft: store.get.get(id) });
+      }
+      if (action === 'video/upload') {
+        const filename = await saveVideo(req, dataDir);
+        // Unique immutable files: an in-flight publisher/preview never sees a replaced file.
+        if (!store.edit.run(draft.text, 'video', filename, null, now(), id).changes) {
+          await unlink(join(dataDir, 'videos', filename));
+          return fail(res, 409, 'Taslak değişti; videoyu yeniden seçin.');
+        }
+        return reply(res, 200, { draft: store.get.get(id) });
+      }
+      if (action === 'image/generate') {
+        const app = getApp(draft.app_id);
+        const filename = await generateImage(draft, app, dataDir);
+        store.edit.run(draft.text, 'generated', filename, null, now(), id);
+        return reply(res, 200, { draft: store.get.get(id) });
+      }
+      if (action === 'image/upload') {
+        const input = await readJson(req, 8_000_000);
+        const types = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+        const ext = types[input.type];
+        if (!ext || typeof input.base64 !== 'string') return fail(res, 400, 'PNG, JPEG veya WebP yükleyin.');
+        const bytes = Buffer.from(input.base64, 'base64');
+        if (!bytes.length || bytes.length > 5_000_000) return fail(res, 400, 'Görsel 5 MB altında olmalı.');
+        const valid = (ext === 'png' && bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))
+          || (ext === 'jpg' && bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex')))
+          || (ext === 'webp' && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP');
+        if (!valid) return fail(res, 400, 'Görsel dosyası doğrulanamadı.');
+        const imageDir = join(dataDir, 'images');
+        mkdirSync(imageDir, { recursive: true, mode: 0o700 });
+        const filename = `${id}-upload.${ext}`;
+        writeFileSync(join(imageDir, filename), bytes, { mode: 0o600 });
+        store.edit.run(draft.text, 'uploaded', filename, null, now(), id);
+        return reply(res, 200, { draft: store.get.get(id) });
+      }
+      if (action === 'reject') {
+        store.reject.run(now(), id);
+        return reply(res, 200, { draft: store.get.get(id) });
+      }
+      if (action === 'publish') {
+        if (!connectedAccount(store)) return fail(res, 400, 'Önce X hesabını bağlayın.');
+        cleanText(draft.text);
+        const stamp = now();
+        if (!store.markPublishing.run(stamp, stamp, id).changes) return fail(res, 409, 'Taslak zaten işleniyor.');
+        try {
+          const xId = await publish(store, draft, dataDir);
+          store.markPublished.run(xId, now(), now(), id);
+          return reply(res, 200, { draft: store.get.get(id) });
+        } catch (error) {
+          store.markFailed.run(error.uncertain ? 'uncertain' : 'draft', error.message, now(), id);
+          throw error;
+        } finally { usage.invalidate(); }
+      }
+      return fail(res, 404, 'İşlem bulunamadı.');
+    } finally { draftOperations.delete(id); }
   }
+  const video = path.match(/^\/api\/videos\/([a-f0-9-]{36}\.mp4)$/);
+  if (['GET', 'HEAD'].includes(req.method) && video) return serveVideo(req, res, dataDir, video[1]);
   const image = path.match(/^\/api\/images\/([a-f0-9-]{36}(?:-upload)?\.(?:jpg|png|webp))$/);
   if (req.method === 'GET' && image) {
     const filename = image[1];
@@ -395,4 +455,6 @@ server.listen(port, host, () => {
   } else console.log(`Social Studio: ${launchUrl}`);
   setTimeout(checkDaily, 2000).unref();
   setInterval(checkDaily, 60_000).unref();
+  setTimeout(() => social.scheduler().catch(console.error), 2500).unref();
+  setInterval(() => social.scheduler().catch(console.error), 30_000).unref();
 });

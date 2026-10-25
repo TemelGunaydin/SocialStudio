@@ -1,4 +1,6 @@
 import { onboarding } from './onboarding.js';
+import { linkedInEditor, tikTokEditor } from './linkedin.js';
+import { createStudio } from './studio.js';
 const $ = (selector) => document.querySelector(selector);
 let state = null;
 let selectedId = null;
@@ -23,11 +25,12 @@ function toast(message, error = false) {
 }
 
 async function api(path, method = 'GET', body, extraHeaders = {}) {
+  const binary = body instanceof Blob;
   const response = await fetch(path, {
     method,
     credentials: 'same-origin',
-    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...extraHeaders },
-    body: body ? JSON.stringify(body) : undefined
+    headers: { ...(body && !binary ? { 'Content-Type': 'application/json' } : {}), ...extraHeaders },
+    body: binary ? body : body ? JSON.stringify(body) : undefined
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `İstek başarısız (${response.status}).`);
@@ -83,6 +86,7 @@ function render() {
   renderList();
   renderReview();
   setup.update(state);
+  studio.update(state);
 }
 
 function renderUsage() {
@@ -157,7 +161,7 @@ function statusLabel(status) {
 }
 
 function renderList() {
-  document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.filter === filter));
+  document.querySelectorAll('[data-filter]').forEach((button) => button.classList.toggle('active', button.dataset.filter === filter));
   const title = { draft: 'İnceleme bekleyenler', published: 'Yayınlananlar', all: 'Tüm taslaklar' }[filter];
   $('#queue-title').textContent = title;
   const drafts = listForFilter();
@@ -167,10 +171,11 @@ function renderList() {
     return `<button class="draft-card ${selectedId === draft.id ? 'selected' : ''}" data-id="${draft.id}">
       <img src="${app.icon}" alt="" class="draft-icon">
       <div class="draft-body"><div class="draft-top"><strong>${escapeHtml(app.name)}</strong><span>${formatDate(draft.created_at)}</span></div>
-      <p>${escapeHtml(draft.text)}</p><div class="draft-bottom"><span class="status-badge ${draft.status}"><i></i>${statusLabel(draft.status)}</span>${draft.media_kind !== 'none' ? '<span class="image-flag">▧ Görsel</span>' : ''}</div></div>
+      <p>${escapeHtml(draft.text)}</p><div class="draft-bottom"><span class="status-badge ${draft.status}"><i></i>${statusLabel(draft.status)}</span>${draft.media_kind !== 'none' ? `<span class="image-flag">${draft.media_kind === 'video' ? '▷ Video' : '▧ Görsel'}</span>` : ''}</div></div>
     </button>`;
   }).join('') : `<div class="empty-queue"><div class="empty-icon">✧</div><strong>Burada henüz taslak yok.</strong><p>${filter === 'draft' ? 'Yeni bir taslak üret veya manuel olarak ekle.' : 'Bu bölümde henüz kayıt bulunmuyor.'}</p></div>`;
   document.querySelectorAll('.draft-card').forEach((button) => button.addEventListener('click', () => {
+    if (busy) return;
     if (dirty && !confirm('Kaydedilmemiş değişiklikleri bırakmak istiyor musun?')) return;
     selectedId = button.dataset.id;
     dirty = false;
@@ -197,30 +202,48 @@ function renderReview() {
   const app = appFor(draft.app_id);
   const editable = draft.status === 'draft';
   const image = mediaUrl(draft, app);
+  const video = draft.media_kind === 'video' && draft.media_path ? `/api/videos/${draft.media_path}` : null;
   $('#review-panel').innerHTML = `
     <div class="review-header"><div><span class="eyebrow">REVIEW DESK / ${escapeHtml(app.category.toUpperCase())}</span><h2>${escapeHtml(app.name)}</h2></div><span class="status-badge ${draft.status}"><i></i>${statusLabel(draft.status)}</span></div>
     <div class="review-inner">
+      <div class="linkedin-launch"><div><strong>Diğer platformlar için hazırla</strong><p>Ayrı metin hazırla, videonu önizle, kendin paylaş.</p></div><div class="manual-platform-actions"><button id="linkedin-edit" type="button" class="button light">LinkedIn taslağı ↗</button><button id="tiktok-edit" type="button" class="button light">TikTok taslağı ↗</button></div></div>
       <div class="source-note"><div class="source-icon">⌁</div><div><strong>${draft.feature === 'Manual draft' ? 'Manuel taslak' : 'Ürün sayfasından alınan özellik'}</strong><p>${draft.feature === 'Manual draft' ? 'Metni yayınlamadan önce ürün sayfasındaki bilgilerle karşılaştır.' : escapeHtml(draft.feature)}</p><a href="${app.url}" target="_blank" rel="noopener noreferrer">Ürün sayfasını aç ↗</a></div></div>
       <div class="field-head"><label for="post-text">Gönderi metni</label><span id="char-count">${280 - weightedLength(draft.text) - 25} karakter kaldı</span></div>
       <textarea id="post-text" rows="5" ${editable ? '' : 'disabled'}>${escapeHtml(draft.text)}</textarea>
       <div class="field-head link-head"><span>Bağlantı</span><span>Otomatik eklenir</span></div><div class="link-box"><span>↗</span><span>${escapeHtml(draft.url)}</span></div>
-      <div class="field-head media-head"><span>Görsel</span><span>İsteğe bağlı</span></div>
+      <div class="field-head media-head"><span>Görsel veya video</span><span>İsteğe bağlı · birini seç</span></div>
       <div class="media-choices ${editable ? '' : 'disabled'}">
-        <button data-media="none" class="media-choice ${draft.media_kind === 'none' ? 'active' : ''}" ${editable ? '' : 'disabled'}>Görselsiz</button>
+        <button data-media="none" class="media-choice ${draft.media_kind === 'none' ? 'active' : ''}" ${editable ? '' : 'disabled'}>Medyasız</button>
         <button data-media="icon" class="media-choice ${draft.media_kind === 'icon' ? 'active' : ''}" ${editable && app.icon !== '/favicon.svg' ? '' : 'disabled'}>Uygulama ikonu</button>
         <button id="image-generate" class="media-choice ${draft.media_kind === 'generated' ? 'active' : ''}" ${editable && state.openaiConfigured ? '' : 'disabled'}>✦ Görsel üret</button>
         <button id="image-upload" class="media-choice ${draft.media_kind === 'uploaded' ? 'active' : ''}" ${editable ? '' : 'disabled'}>▧ Görsel yükle</button>
+        <button id="video-upload" class="media-choice ${draft.media_kind === 'video' ? 'active' : ''}" ${editable ? '' : 'disabled'}>▷ Video seç</button>
+        <input type="file" id="video-file" accept="video/mp4,.mp4" hidden>
         <input type="file" id="image-file" accept="image/png,image/jpeg,image/webp" hidden>
       </div>
+      <p class="video-hint">Video: MP4, en fazla 100 MB; H.264/AAC önerilir. Dosya önce bu bilgisayara kaydedilir. Yalnızca “Onayla ve yayınla” dediğinde X'e yüklenir; X ücreti oluşabilir.</p>
       ${image ? `<div class="media-preview"><img src="${image}" alt="Seçilen gönderi görseli"><span>${draft.media_kind === 'generated' ? 'AI GÖRSELİ' : draft.media_kind === 'uploaded' ? 'YÜKLENEN GÖRSEL' : 'UYGULAMA İKONU'}</span></div>` : ''}
       <div class="preview-heading"><span class="eyebrow">LIVE PREVIEW</span><span>X üzerinde yaklaşık görünüm</span></div>
-      <div class="post-preview"><div class="preview-avatar">X</div><div class="preview-content"><div class="preview-author"><strong>${escapeHtml(state.xAccount?.name || 'X hesabın')}</strong><span>@${escapeHtml(state.xAccount?.username || 'x-hesabin')} · şimdi</span><span class="preview-x">𝕏</span></div><p id="preview-copy">${escapeHtml(draft.text)}</p><a href="${app.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(draft.url)}</a>${image ? `<img src="${image}" class="preview-image" alt="Gönderi görseli">` : ''}<div class="preview-engagement">♡ <span>◌</span> ⇄ <span>↗</span></div></div></div>
+      <div class="post-preview"><div class="preview-avatar">X</div><div class="preview-content"><div class="preview-author"><strong>${escapeHtml(state.xAccount?.name || 'X hesabın')}</strong><span>@${escapeHtml(state.xAccount?.username || 'x-hesabin')} · şimdi</span><span class="preview-x">𝕏</span></div><p id="preview-copy">${escapeHtml(draft.text)}</p><a href="${app.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(draft.url)}</a>${image ? `<img src="${image}" class="preview-image" alt="Gönderi görseli">` : ''}${video ? `<video src="${video}" class="preview-video" controls playsinline preload="metadata" aria-label="X gönderisinin seçilen videosu"></video>` : ''}<div class="preview-engagement">♡ <span>◌</span> ⇄ <span>↗</span></div></div></div>
       ${draft.error ? `<div class="draft-error">${escapeHtml(draft.error)}</div>` : ''}
       ${draft.status === 'uncertain' ? '<div class="uncertain-note">X yanıtı kesinleşmedi. Yeni bir gönderi oluşturmadan önce X hesabındaki son paylaşımları kontrol et.</div>' : ''}
       ${draft.status === 'published' && draft.x_post_id ? `<a class="published-link" href="https://x.com/i/web/status/${draft.x_post_id}" target="_blank" rel="noopener noreferrer">X gönderisini aç ↗</a>` : ''}
       ${editable ? `<div class="review-actions"><button id="reject" class="button light">Reddet</button><button id="save" class="button light">Değişiklikleri kaydet</button><button id="publish" class="button primary" ${state.xAccount ? '' : 'disabled'}>Onayla ve yayınla ↗</button></div>${state.xAccount ? '' : '<p class="publish-hint">Yayınlamak için önce X hesabını bağla.</p>'}` : ''}
     </div>`;
+  for (const [platform, editor] of [['linkedin', linkedin], ['tiktok', tiktok]]) {
+    $(`#${platform}-edit`).addEventListener('click', () => {
+      if (busy) return toast('Devam eden işlemin bitmesini bekle.');
+      if (dirty) return toast('Önce X metnindeki değişiklikleri kaydet; diğer taslaklar kayıtlı metinden hazırlanır.');
+      editor.open(draft, app.name, state.openaiConfigured);
+    });
+  }
   if (editable) bindEditor(draft);
+  $('#generate').disabled = !state.openaiConfigured || !state.catalog.length || busy;
+  if (busy) lockReview();
+}
+
+function lockReview() {
+  $('#review-panel').querySelectorAll('button, input, textarea').forEach((node) => { node.disabled = true; });
 }
 
 function bindEditor(draft) {
@@ -233,14 +256,17 @@ function bindEditor(draft) {
     $('#preview-copy').textContent = textarea.value;
   });
   document.querySelectorAll('[data-media]').forEach((button) => button.addEventListener('click', async () => {
+    if (busy) return;
     try { await saveDraft(draft.id, button.dataset.media); toast('Görsel seçimi kaydedildi.'); }
     catch (error) { toast(error.message, true); }
   }));
   $('#save').addEventListener('click', async () => {
+    if (busy) return;
     try { await saveDraft(draft.id, draft.media_kind); toast('Taslak kaydedildi.'); }
     catch (error) { toast(error.message, true); }
   });
   $('#reject').addEventListener('click', async () => {
+    if (busy) return;
     if (!confirm('Bu taslağı reddetmek istiyor musun?')) return;
     try { await api(`/api/drafts/${draft.id}/reject`, 'POST'); await refresh(); toast('Taslak reddedildi.'); }
     catch (error) { toast(error.message, true); }
@@ -249,31 +275,55 @@ function bindEditor(draft) {
     if (busy) return;
     busy = true;
     $('#publish').disabled = true;
-    $('#publish').textContent = 'Yayınlanıyor…';
+    $('#publish').textContent = draft.media_kind === 'video' ? 'Video yükleniyor ve yayınlanıyor…' : 'Yayınlanıyor…';
+    lockReview();
     try {
       if (dirty) await saveDraft(draft.id, draft.media_kind);
       await api(`/api/drafts/${draft.id}/publish`, 'POST');
       await refresh(); toast('Gönderi X üzerinde yayınlandı.');
     } catch (error) { await refresh(); toast(error.message, true); }
-    finally { busy = false; }
+    finally { busy = false; renderReview(); }
   });
   $('#image-generate').addEventListener('click', async () => {
     if (busy) return;
     busy = true;
     $('#image-generate').textContent = 'Üretiliyor…';
     $('#image-generate').disabled = true;
+    lockReview();
     try {
       if (dirty) await saveDraft(draft.id, draft.media_kind);
       await api(`/api/drafts/${draft.id}/image/generate`, 'POST');
       await refresh(); toast('Yeni görsel taslağa eklendi.');
     } catch (error) { toast(error.message, true); renderReview(); }
-    finally { busy = false; }
+    finally { busy = false; renderReview(); }
+  });
+  $('#video-upload').addEventListener('click', () => $('#video-file').click());
+  $('#video-file').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || busy) return;
+    if (!/\.mp4$/i.test(file.name) || !file.size || file.size > 100_000_000) return toast('100 MB altında bir MP4 video seç.', true);
+    busy = true; lockReview();
+    $('#video-upload').textContent = 'Bilgisayara kaydediliyor…';
+    try {
+      if (dirty) await saveDraft(draft.id, draft.media_kind);
+      await api(`/api/drafts/${draft.id}/video/upload`, 'POST', file, { 'Content-Type': 'video/mp4' });
+      await refresh(); toast('Video taslağa eklendi. Henüz X’e yüklenmedi veya yayınlanmadı.');
+    } catch (error) { toast(error.message, true); }
+    finally {
+      const unsaved = dirty ? $('#post-text')?.value : null;
+      busy = false; renderReview();
+      if (unsaved !== null) {
+        $('#post-text').value = unsaved;
+        $('#post-text').dispatchEvent(new Event('input'));
+      }
+    }
   });
   $('#image-upload').addEventListener('click', () => $('#image-file').click());
   $('#image-file').addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || busy) return;
     if (file.size > 5_000_000) return toast('Görsel 5 MB altında olmalı.', true);
+    busy = true; lockReview();
     try {
       if (dirty) await saveDraft(draft.id, draft.media_kind);
       const base64 = await new Promise((resolve, reject) => {
@@ -285,6 +335,7 @@ function bindEditor(draft) {
       await api(`/api/drafts/${draft.id}/image/upload`, 'POST', { type: file.type, base64 });
       await refresh(); toast('Görsel taslağa eklendi.');
     } catch (error) { toast(error.message, true); }
+    finally { busy = false; renderReview(); }
   });
 }
 
@@ -309,7 +360,8 @@ $('#usage-refresh').addEventListener('click', () => refreshUsage(true));
 setInterval(() => { if (state && !document.hidden) refreshUsage(); }, 5 * 60_000);
 document.addEventListener('visibilitychange', () => { if (state && !document.hidden) refreshUsage(); });
 
-document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => {
+document.querySelectorAll('[data-filter]').forEach((button) => button.addEventListener('click', () => {
+  if (busy) return;
   filter = button.dataset.filter;
   const visible = listForFilter();
   if (!visible.some((draft) => draft.id === selectedId)) selectedId = visible[0]?.id || null;
@@ -325,7 +377,7 @@ $('#generate').addEventListener('click', async () => {
     const result = await api('/api/drafts/generate', 'POST', { appId: $('#app-select').value || null });
     selectedId = result.draft.id; filter = 'draft'; await refresh(); toast('Yeni taslak hazır.');
   } catch (error) { toast(error.message, true); render(); }
-  finally { busy = false; }
+  finally { busy = false; render(); }
 });
 
 $('#project-open').addEventListener('click', () => $('#project-dialog').showModal());
@@ -395,7 +447,12 @@ $('#manual-form').addEventListener('submit', async (event) => {
 
 const params = new URLSearchParams(location.search);
 if (params.has('x_error')) toast(params.get('x_error'), true);
+if (params.has('social_error')) toast(params.get('social_error'), true);
+if (params.get('social') === 'connected') toast('Sosyal medya hesabı bağlandı.');
 if (params.get('x') === 'connected') toast('X hesabı bağlandı.');
 if (params.size) history.replaceState(null, '', '/');
+const linkedin = linkedInEditor({ api, toast });
+const tiktok = tikTokEditor({ api, toast });
 const setup = onboarding({ api, refresh, toast });
+const studio = createStudio({ api, toast, openProject: () => $('#project-dialog').showModal(), openSetup: () => $('#onboarding-open').click() });
 setup.start();

@@ -35,6 +35,7 @@ test('owner reviews a draft and publishing stays blocked without X authorization
     assert.equal(ready, true, 'server started');
     const unauthorized = await fetch(`${base}/api/state`);
     assert.equal(unauthorized.status, 401);
+    assert.equal((await fetch(`${base}/api/social/state`)).status, 401);
     assert.equal((await fetch(`${base}/api/usage`)).status, 401);
     const crossSite = await fetch(`${base}/api/login`, { method: 'POST', body: JSON.stringify({ password: 'test-owner-password' }) });
     assert.equal(crossSite.status, 403);
@@ -46,6 +47,17 @@ test('owner reviews a draft and publishing stays blocked without X authorization
     assert.match(login.headers.get('set-cookie'), /SameSite=Lax/);
     const cookie = login.headers.get('set-cookie').split(';')[0];
     const headers = { Origin: base, Cookie: cookie, 'Content-Type': 'application/json' };
+    assert.equal((await fetch(`${base}/api/social/posts`, { method: 'POST', headers: { ...headers, Origin: 'https://other.example' }, body: '{}' })).status, 403);
+    const campaignResponse = await fetch(`${base}/api/social/posts`, { method: 'POST', headers, body: JSON.stringify({
+      context: 'Uygulamamı Türkçe tanıt.', model: 'gpt-6-luna', targets: [{ platform: 'x' }, { platform: 'youtube' }, { platform: 'tiktok' }]
+    }) });
+    assert.equal(campaignResponse.status, 201);
+    const campaign = await campaignResponse.json();
+    assert.equal(campaign.posts.length, 3);
+    const socialState = await (await fetch(`${base}/api/social/state`, { headers })).json();
+    assert.equal(socialState.posts.length, 3);
+    assert.equal(socialState.accounts.length, 0);
+    assert.equal((await fetch(`${base}/api/social/posts/${campaign.posts[0].id}/publish`, { method: 'POST', headers })).status, 400);
     const state = await (await fetch(`${base}/api/state`, { headers })).json();
     assert.equal(state.catalog.length, 0);
     assert.equal(state.usage.estimate.today.costUsd, 0);

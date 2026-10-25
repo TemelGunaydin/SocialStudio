@@ -1,6 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { open } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
+import { validateVideo, videoPath } from './video.mjs';
 
 const api = 'https://api.x.com/2';
 const scopes = 'tweet.read tweet.write users.read media.write offline.access';
@@ -84,25 +87,41 @@ export function connectedAccount(store) {
   return raw ? JSON.parse(raw).user : null;
 }
 
-async function accessToken(store, fetchImpl = fetch) {
-  const raw = store.getSetting.get('x_token')?.value;
+export async function accessToken(store, fetchImpl = fetch, accountId = null) {
+  const legacyRaw = store.getSetting.get('x_token')?.value;
+  const legacy = legacyRaw ? JSON.parse(legacyRaw) : null;
+  const account = accountId
+    ? store.db.prepare("SELECT * FROM social_accounts WHERE id=? AND platform='x'").get(accountId)
+    : legacy?.user?.id ? store.db.prepare("SELECT * FROM social_accounts WHERE platform='x' AND remote_id=?").get(legacy.user.id) : null;
+  const raw = account?.token || (!accountId ? legacyRaw : null);
   if (!raw) throw new Error('Önce X hesabını bağlayın.');
   const token = JSON.parse(raw);
   if (token.expires_at > Date.now() + 60_000) return token.access_token;
-  if (tokenRefreshes.has(store)) return tokenRefreshes.get(store);
+  let requests = tokenRefreshes.get(store);
+  if (!requests) { requests = new Map(); tokenRefreshes.set(store, requests); }
+  const key = account?.id || 'legacy';
+  if (requests.has(key)) return requests.get(key);
   const pending = (async () => {
     const { clientId } = credentials();
     const refreshed = await tokenRequest({
       grant_type: 'refresh_token', refresh_token: token.refresh_token, client_id: clientId
     }, fetchImpl);
-    if (store.getSetting.get('x_token')?.value !== raw) throw new Error('X bağlantısı değişti. İsteği yeniden deneyin.');
+    if (!refreshed.access_token) throw new Error('X erişim izni yenilenemedi.');
     const updated = { ...token, ...refreshed, refresh_token: refreshed.refresh_token || token.refresh_token };
-    store.setSetting.run('x_token', JSON.stringify(updated));
+    const encoded = JSON.stringify(updated);
+    if (account) {
+      if (!store.db.prepare('UPDATE social_accounts SET token=? WHERE id=? AND token=?').run(encoded, account.id, raw).changes) throw new Error('X bağlantısı değişti. İsteği yeniden deneyin.');
+      const currentLegacy = store.getSetting.get('x_token')?.value;
+      if (currentLegacy && JSON.parse(currentLegacy).user?.id === account.remote_id) store.setSetting.run('x_token', encoded);
+    } else {
+      if (store.getSetting.get('x_token')?.value !== raw) throw new Error('X bağlantısı değişti. İsteği yeniden deneyin.');
+      store.setSetting.run('x_token', encoded);
+    }
     return updated.access_token;
   })();
-  tokenRefreshes.set(store, pending);
+  requests.set(key, pending);
   try { return await pending; }
-  finally { tokenRefreshes.delete(store); }
+  finally { requests.delete(key); }
 }
 
 export async function readCredits(store, fetchImpl = fetch) {
@@ -117,11 +136,67 @@ export async function readCredits(store, fetchImpl = fetch) {
   return { totalUsd: data.total_balance, prepaidUsd: data.prepaid_balance, freeUsd: data.free_balance };
 }
 
-export async function publish(store, draft, dataDir, fetchImpl = fetch) {
-  const token = await accessToken(store, fetchImpl);
+async function uploadVideo(token, path, fetchImpl, wait) {
+  const size = await validateVideo(path);
+  const authorization = { Authorization: `Bearer ${token}` };
+  const response = await fetchImpl(`${api}/media/upload/initialize`, {
+    method: 'POST', headers: { ...authorization, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify({ media_type: 'video/mp4', media_category: 'tweet_video', total_bytes: size })
+  });
+  const initialized = await jsonResponse(response, 'X video başlatma');
+  const id = initialized.data?.id;
+  if (typeof id !== 'string' || !/^\d+$/.test(id)) throw new Error('X video kimliği döndürmedi.');
+  const file = await open(path, 'r');
+  try {
+    const chunk = Buffer.alloc(4 * 1024 * 1024);
+    let position = 0;
+    let segment = 0;
+    while (position < size) {
+      const { bytesRead } = await file.read(chunk, 0, Math.min(chunk.length, size - position), position);
+      if (!bytesRead) throw new Error('Video dosyası yükleme sırasında değişti. Yeniden seçin.');
+      const form = new FormData();
+      form.append('segment_index', String(segment++));
+      form.append('media', new Blob([chunk.subarray(0, bytesRead)], { type: 'application/octet-stream' }), 'chunk.bin');
+      await jsonResponse(await fetchImpl(`${api}/media/upload/${id}/append`, {
+        method: 'POST', headers: authorization, body: form, signal: AbortSignal.timeout(60_000)
+      }), 'X video parçası yükleme');
+      position += bytesRead;
+    }
+  } finally { await file.close(); }
+  const finalized = await jsonResponse(await fetchImpl(`${api}/media/upload/${id}/finalize`, {
+    method: 'POST', headers: authorization, signal: AbortSignal.timeout(30_000)
+  }), 'X video tamamlama');
+  let processing = finalized.data?.processing_info;
+  if (!finalized.data) throw new Error('X video işleme bilgisi döndürmedi.');
+  if (!processing) return id;
+  const deadline = Date.now() + 5 * 60_000;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (processing.state === 'succeeded') return id;
+    if (processing.state === 'failed') throw new Error(`X videoyu işleyemedi: ${processing.error?.message || 'MP4/H.264 ve AAC biçimini kontrol edin.'}`);
+    if (!['pending', 'in_progress'].includes(processing.state)) throw new Error('X video işleme durumu tanınmadı. Gönderi yayınlanmadı.');
+    const seconds = processing.check_after_secs ?? 1;
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0 || seconds > 60
+        || Date.now() + seconds * 1000 >= deadline) break;
+    await wait(seconds * 1000);
+    const result = await jsonResponse(await fetchImpl(`${api}/media/upload?command=STATUS&media_id=${id}`, {
+      headers: authorization, signal: AbortSignal.timeout(20_000)
+    }), 'X video durumu');
+    processing = result.data?.processing_info;
+    if (!processing) throw new Error('X video işleme durumu eksik. Gönderi yayınlanmadı.');
+  }
+  if (processing.state === 'succeeded') return id;
+  throw new Error('X video işleme süresi doldu. Gönderi yayınlanmadı; yeniden denemek için ayrıca onay vermelisin.');
+}
+
+export async function publish(store, draft, dataDir, fetchImpl = fetch, wait = delay) {
+  const token = await accessToken(store, fetchImpl, draft.account_id);
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-  const payload = { text: `${draft.text.trim()}\n\n${draft.url}` };
-  if (draft.media_kind !== 'none') {
+  const payload = { text: draft.url ? `${draft.text.trim()}\n\n${draft.url}` : draft.text.trim() };
+  if (draft.media_kind === 'video') {
+    const id = await uploadVideo(token, videoPath(dataDir, draft.media_path), fetchImpl, wait);
+    payload.media = { media_ids: [id] };
+  } else if (draft.media_kind !== 'none') {
     let bytes;
     if (draft.media_kind === 'icon') {
       const icon = store.project.get(draft.app_id)?.icon;
@@ -155,7 +230,13 @@ export async function publish(store, draft, dataDir, fetchImpl = fetch) {
     error.uncertain = true;
     throw error;
   }
-  const result = await jsonResponse(response, 'X yayınlama');
+  let result;
+  try { result = await jsonResponse(response, 'X yayınlama'); }
+  catch (error) {
+    // A server error after POST may still mean X created the post. Never offer a blind retry.
+    if (response.status >= 500) error.uncertain = true;
+    throw error;
+  }
   if (!result.data?.id) {
     const error = new Error('X yanıtında gönderi kimliği yok. Gönderi yayınlanmış olabilir.');
     error.uncertain = true;

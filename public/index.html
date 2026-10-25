@@ -8,6 +8,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/onboarding.css">
+  <link rel="stylesheet" href="/studio.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -45,14 +46,25 @@
   <div id="workspace" class="app-shell hidden">
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark">S<span>·</span></div><div><strong>SOCIAL STUDIO</strong><small>Yerel paylaşım paneli</small></div></div>
-      <div class="side-label">WORKSPACE</div>
+      <div class="side-label">ÇALIŞMA ALANI</div>
       <nav aria-label="Ana menü">
-        <button class="nav-item active" data-filter="draft"><span class="nav-icon">▣</span> İnceleme masası <span id="nav-pending" class="nav-count">0</span></button>
-        <button class="nav-item" data-filter="published"><span class="nav-icon">◷</span> Yayınlananlar</button>
-        <button class="nav-item" data-filter="all"><span class="nav-icon">▦</span> Tüm taslaklar</button>
+        <button class="nav-item active" data-studio-view="compose"><span class="nav-icon" aria-hidden="true">✎</span> İçerik stüdyosu</button>
+        <button class="nav-item" data-studio-view="queue"><span class="nav-icon" aria-hidden="true">▤</span> Paylaşım kuyruğu <span id="social-nav-count" class="nav-count">0</span></button>
+        <button class="nav-item" data-studio-view="media"><span class="nav-icon" aria-hidden="true">▱</span> Medya kütüphanesi</button>
+        <button class="nav-item" data-studio-view="accounts"><span class="nav-icon" aria-hidden="true">◎</span> Sosyal hesaplar</button>
+        <button class="nav-item" data-studio-view="automation"><span class="nav-icon" aria-hidden="true">ϟ</span> Otomatik akış</button>
+        <button class="nav-item" data-studio-view="settings"><span class="nav-icon" aria-hidden="true">⚙</span> API ve modeller</button>
+        <div class="s-sidebar-divider"></div>
+        <button class="nav-item" data-studio-view="legacy"><span class="nav-icon" aria-hidden="true">◷</span> Önceki X taslakları <span id="nav-pending" class="nav-count">0</span></button>
+      </nav>
+      <nav aria-label="Önceki taslak filtreleri" class="hidden">
+        <button class="nav-item" data-filter="draft">İnceleme masası</button>
+        <button class="nav-item" data-filter="published"><span class="nav-icon" aria-hidden="true">◷</span> Yayınlananlar</button>
+        <button class="nav-item" data-filter="all"><span class="nav-icon" aria-hidden="true">▦</span> Tüm taslaklar</button>
       </nav>
       <div class="side-spacer"></div>
       <div class="connection-card" id="connection-card"></div>
+      <div class="s-sidebar-note"><strong><i class="s-dot"></i> Kendi alanın, kendi akışın.</strong>İçeriklerin ve API anahtarların bu bilgisayarda saklanır.</div>
       <button id="logout" class="logout-button">Oturumu kapat <span>↗</span></button>
     </aside>
 
@@ -62,7 +74,8 @@
         <div class="topbar-right"><span class="timezone">◉ Europe / Istanbul</span><span class="avatar">S</span></div>
       </header>
 
-      <div class="content">
+      <div id="social-studio" class="s-content"></div>
+      <div id="legacy-workspace" class="content hidden">
         <section class="hero">
           <div>
             <div class="eyebrow"><span class="live-dot"></span> GÜNLÜK İÇERİK AKIŞI</div>
@@ -94,7 +107,7 @@
             <div class="usage-metric"><span class="metric-label">BU AY YAYIN MALİYETİ <span class="estimate-tag">TAHMİNİ</span></span><strong id="usage-month">$0,00</strong><small id="usage-month-detail">0 bağlantılı gönderi</small></div>
           </div>
           <p id="usage-error" class="usage-error hidden" role="status"></p>
-          <details class="usage-explanation"><summary>Nasıl hesaplanıyor?</summary><p>Bakiye X geliştirici hesabının toplam kredisidir; diğer uygulamaların kullanımı da bakiyeyi etkileyebilir. Panel açıkken 5 dakikada bir kontrol edilir. Yayın maliyeti, bu panelden başarıyla yayınlanan bağlantılı gönderi sayısı × <span id="usage-unit-price">$0,20</span> olarak hesaplanır. Görsel yükleme, hesap okuma, başarısız veya belirsiz istekler ve OpenAI giderleri dahil değildir. Tahminlerde güncel birim fiyat kullanılır. Kesin harcama ve kredi yüklemeleri için <a href="https://console.x.com/" target="_blank" rel="noopener noreferrer">X Developer Console</a>'u kontrol et. <a href="https://docs.x.com/x-api/getting-started/pricing" target="_blank" rel="noopener noreferrer">Fiyat kaynağı</a> · <span id="usage-pricing-date"></span></p></details>
+          <details class="usage-explanation"><summary>Nasıl hesaplanıyor?</summary><p>Bakiye X geliştirici hesabının toplam kredisidir; diğer uygulamaların kullanımı da bakiyeyi etkileyebilir. Panel açıkken 5 dakikada bir kontrol edilir. Yayın maliyeti, bu panelden başarıyla yayınlanan bağlantılı gönderi sayısı × <span id="usage-unit-price">$0,20</span> olarak hesaplanır. Görsel/video yükleme, hesap okuma, başarısız veya belirsiz istekler ve OpenAI giderleri dahil değildir. Tahminlerde güncel birim fiyat kullanılır. Kesin harcama ve kredi yüklemeleri için <a href="https://console.x.com/" target="_blank" rel="noopener noreferrer">X Developer Console</a>'u kontrol et. <a href="https://docs.x.com/x-api/getting-started/pricing" target="_blank" rel="noopener noreferrer">Fiyat kaynağı</a> · <span id="usage-pricing-date"></span></p></details>
         </section>
 
         <section class="studio-grid">
@@ -184,6 +197,46 @@
       <label class="project-review"><input id="project-reviewed" type="checkbox" required> <span>Bağlantıyı ve tüm özellikleri kontrol ettim; yalnızca doğru iddiaları kaydedeceğim.</span></label>
       <div class="modal-actions"><button id="project-cancel" type="button" class="button light">Vazgeç</button><button type="submit" class="button primary">Kontrol ettim, projeyi ekle</button></div>
     </form>
+  </dialog>
+  <dialog id="linkedin-dialog" class="modal linkedin-editor" aria-labelledby="linkedin-title">
+    <div class="modal-head"><div><span class="eyebrow">LINKEDIN / MANUEL PAYLAŞIM</span><h2 id="linkedin-title">LinkedIn taslağı</h2><p id="linkedin-project" class="linkedin-note"></p></div><button id="linkedin-close" class="icon-button" type="button" aria-label="LinkedIn taslağını kapat">×</button></div>
+    <p class="project-intro">Metni düzenle, kopyala ve LinkedIn'de yeni gönderiye yapıştır. Bu panel LinkedIn'e bağlanmaz veya yayın yapmaz; X taslağın değişmez.</p>
+    <button id="linkedin-generate" type="button" class="button light">✦ LinkedIn için yeniden yaz</button>
+    <p id="linkedin-ai-note" class="linkedin-note"></p>
+    <div class="field-head"><label for="linkedin-text">LinkedIn gönderi metni</label><span id="linkedin-count"></span></div>
+    <textarea id="linkedin-text" rows="9" aria-describedby="linkedin-count linkedin-save-state"></textarea>
+    <p id="linkedin-save-state" class="linkedin-note" role="status"></p>
+    <section class="linkedin-video-section" aria-labelledby="linkedin-video-title">
+      <h3 id="linkedin-video-title">Tanıtım videosu <small>İsteğe bağlı</small></h3>
+      <div class="linkedin-video-actions"><button id="linkedin-video-choose" type="button" class="button light">MP4 video seç</button><button id="linkedin-video-remove" type="button" class="text-button" hidden>Seçimi kaldır</button></div>
+      <input id="linkedin-video-file" type="file" accept="video/mp4,.mp4" hidden>
+      <p id="linkedin-video-name" class="linkedin-note"></p>
+      <video id="linkedin-video-preview" controls playsinline preload="metadata" hidden aria-label="Seçilen tanıtım videosunun önizlemesi"></video>
+      <p class="linkedin-note">Video yalnızca tarayıcıda önizlenir; hiçbir yere yüklenmez. Sadece dosya adı kaydedilir. LinkedIn'de paylaşırken videoyu bilgisayarından ayrıca ekle.</p>
+    </section>
+    <p id="linkedin-feedback" class="linkedin-feedback" role="status" aria-live="polite"></p>
+    <div class="modal-actions"><button id="linkedin-save" type="button" class="button light">Taslağı kaydet</button><button id="linkedin-copy" type="button" class="button primary">Metni kopyala</button><a id="linkedin-open" class="button dark" href="https://www.linkedin.com/feed/" target="_blank" rel="noopener noreferrer">LinkedIn'i aç ↗</a></div>
+    <p class="linkedin-note">Kopyalamak veya LinkedIn'i açmak paylaşım yapmaz. Yayını LinkedIn'de sen tamamlarsın; burada yayınlandı olarak işaretlenmez.</p>
+  </dialog>
+  <dialog id="tiktok-dialog" class="modal linkedin-editor" aria-labelledby="tiktok-title">
+    <div class="modal-head"><div><span class="eyebrow">TIKTOK / MANUEL PAYLAŞIM</span><h2 id="tiktok-title">TikTok taslağı</h2><p id="tiktok-project" class="linkedin-note"></p></div><button id="tiktok-close" class="icon-button" type="button" aria-label="TikTok taslağını kapat">×</button></div>
+    <p class="project-intro">Videonu seç, açıklamayı hazırla, TikTok'ta kendin paylaş. Bu panel TikTok'a bağlanmaz, video yüklemez veya yayın yapmaz.</p>
+    <button id="tiktok-generate" type="button" class="button light">✦ TikTok açıklaması hazırla</button>
+    <p id="tiktok-ai-note" class="linkedin-note"></p>
+    <div class="field-head"><label for="tiktok-text">Açıklama ve hashtag'ler</label><span id="tiktok-count"></span></div>
+    <textarea id="tiktok-text" rows="7" aria-describedby="tiktok-count tiktok-save-state"></textarea>
+    <p id="tiktok-save-state" class="linkedin-note" role="status"></p>
+    <section class="linkedin-video-section" aria-labelledby="tiktok-video-title">
+      <h3 id="tiktok-video-title">Tanıtım videosu <small>Dikey 9:16 önerilir</small></h3>
+      <div class="linkedin-video-actions"><button id="tiktok-video-choose" type="button" class="button light">MP4 video seç</button><button id="tiktok-video-remove" type="button" class="text-button" hidden>Seçimi kaldır</button></div>
+      <input id="tiktok-video-file" type="file" accept="video/mp4,.mp4" hidden>
+      <p id="tiktok-video-name" class="linkedin-note"></p>
+      <video id="tiktok-video-preview" controls playsinline preload="metadata" hidden aria-label="TikTok videosunun önizlemesi"></video>
+      <p class="linkedin-note">Video sadece tarayıcıda önizlenir. Yalnızca dosya adı kaydedilir; yeniden açtığında önizleme için dosyayı tekrar seç. TikTok'ta orijinal videoyu ayrıca yükle.</p>
+    </section>
+    <p id="tiktok-feedback" class="linkedin-feedback" role="status" aria-live="polite"></p>
+    <div class="modal-actions"><button id="tiktok-save" type="button" class="button light">Taslağı kaydet</button><button id="tiktok-copy" type="button" class="button primary">Metni kopyala</button><a id="tiktok-open" class="button dark" href="https://www.tiktok.com/tiktokstudio/upload" target="_blank" rel="noopener noreferrer">TikTok'u aç ↗</a></div>
+    <p class="linkedin-note">Panel açıklamayı bağlantı dahil 2200 karakterle sınırlar. Açıklamadaki URL tıklanabilir olmayabilir; profilindeki bağlantıyı kontrol et. Kopyalamak veya TikTok'u açmak yayın yapmaz; burada yayınlandı olarak işaretlenmez.</p>
   </dialog>
   <dialog id="manual-dialog" class="modal">
     <form id="manual-form" method="dialog">

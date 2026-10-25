@@ -3,7 +3,6 @@ const $ = (selector) => document.querySelector(selector);
 export function onboarding({ api, refresh, toast }) {
   const dialog = $('#onboarding');
   let step = 0;
-  let offered = false;
   let resumeAfterProject = false;
   let setupToken = new URLSearchParams(location.hash.slice(1)).get('setup') || '';
   if (setupToken) history.replaceState(null, '', location.pathname + location.search);
@@ -22,7 +21,6 @@ export function onboarding({ api, refresh, toast }) {
     if (dialog.open) $('#onboarding-title').focus();
   }
   function open(value = 0) {
-    offered = true;
     showStep(value);
     if (!dialog.open) dialog.showModal();
   }
@@ -35,7 +33,6 @@ export function onboarding({ api, refresh, toast }) {
     $('#setup-schedule').checked = state.scheduleEnabled;
     $('#setup-hour').textContent = `${String(state.draftHour).padStart(2, '0')}:00`;
     $('#setup-summary').textContent = [state.openaiConfigured ? 'OpenAI anahtarı kayıtlı' : 'OpenAI: elle taslak kullanabilirsin', `${state.catalog.length} proje`, state.xAccount ? `X: @${state.xAccount.username}` : 'X henüz bağlı değil; yayın öncesinde bağlamalısın'].join(' · ');
-    if (!offered && (!state.openaiConfigured || !state.catalog.length || !state.xConfigured)) open();
   }
   async function save(form, changes, success) {
     const button = form.querySelector('button[type="submit"]');
