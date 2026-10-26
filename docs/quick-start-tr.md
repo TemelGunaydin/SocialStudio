@@ -66,7 +66,7 @@ Planlama İstanbul saatine göredir. Bilgisayar ve uygulama açık olmalı. Plan
 
 ## 4. Video klasörünü ekle
 
-**Medya kütüphanesi** sayfasında klasörünün tam yolunu yaz ve **Klasörü tara** düğmesine bas. Mac için örnek:
+**Medya kütüphanesi** sayfasında **Klasör seç** düğmesine bas. Açılan pencerede video klasörünü bulup **Bu klasörü seç** düğmesine bas; klasör yolu otomatik doldurulur. Videoları içe almak için **Klasörü tara** düğmesini kullan. İstersen yolu elle de yazabilirsin. Mac için örnek:
 
 ```text
 /Users/Adin/Movies/SosyalMedya

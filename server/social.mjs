@@ -5,7 +5,7 @@ import { configurationChanges, saveConfig } from './config.mjs';
 import { projectFromRow } from './projects.mjs';
 import { openaiRequest } from './openai.mjs';
 import { saveVideo } from './video.mjs';
-import { insertMedia, scanFolder, archiveMedia } from './media-library.mjs';
+import { insertMedia, scanFolder, archiveMedia, listFolders } from './media-library.mjs';
 import { textModels, imageModels, modelId, bad, socialCopy, selectVideo, validateCopy } from './social-ai.mjs';
 import { platforms, platformConfig, importXAccount, oauthStart, oauthFinish, creatorInfo, publishSocial } from './social-platforms.mjs';
 
@@ -169,6 +169,10 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
       const created = createPosts(input);
       store.setSetting.run('social_context', input.context);
       return respond({ posts: created }, 201);
+    }
+    if (req.method === 'POST' && path === '/api/social/library/folders') {
+      const input = await readJson(req, 4000);
+      return respond(await listFolders(input.folder));
     }
     if (req.method === 'POST' && path === '/api/social/library/scan') {
       const input = await readJson(req, 4000);

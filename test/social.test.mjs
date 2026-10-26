@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
+import { join, dirname, parse } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openStore } from '../server/db.mjs';
 import { createSocialStudio } from '../server/social.mjs';
 import { upsertAccount, publishSocial, oauthStart, oauthFinish, accountToken } from '../server/social-platforms.mjs';
 import { socialCopy, selectVideo } from '../server/social-ai.mjs';
-import { scanFolder, archiveMedia } from '../server/media-library.mjs';
+import { scanFolder, archiveMedia, listFolders } from '../server/media-library.mjs';
 
 const response = data => Response.json(data);
 const aiResponse = data => response({ output:[{content:[{type:'output_text',text:JSON.stringify(data)}]}] });
@@ -28,6 +28,29 @@ function fixture(options={}) {
   const save=async(post,extra={})=>(await request(`/api/social/posts/${post.id}`,{revision:post.revision,title:'Video başlığı',text:'Sesli notlarını yazıya dönüştür.',accountId:post.account_id,mediaId:post.media_id,options:post.platform==='youtube'?{privacy:'private'}:{},...extra})).post;
   return {dir,store,studio,request,addAccount,create,save,get calls(){return calls;},close(){store.db.close();rmSync(dir,{recursive:true,force:true});}};
 }
+
+test('folder picker lists only visible directories and resolves parent paths without importing files',async()=>{
+  const f=fixture();try{
+    const folder=join(f.dir,'picker');mkdirSync(folder);mkdirSync(join(folder,'Tanıtım & videolar "deneme"'));mkdirSync(join(folder,'.hidden'));
+    writeFileSync(join(folder,'demo.mp4'),mp4());symlinkSync(join(folder,'Tanıtım & videolar "deneme"'),join(folder,'linked'));
+    const result=await f.request('/api/social/library/folders',{folder});
+    assert.equal(result.folder,realpathSync(folder));assert.equal(result.parent,dirname(realpathSync(folder)));
+    assert.deepEqual(result.folders,[{name:'Tanıtım & videolar "deneme"',path:join(realpathSync(folder),'Tanıtım & videolar "deneme"')}]);
+    const child=await f.request('/api/social/library/folders',{folder:result.folders[0].path});assert.deepEqual(child.folders,[]);assert.equal(child.parent,result.folder);
+    assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM media_library').get().n,0);assert.equal(f.store.getSetting.get('social_folder'),undefined);assert.equal(f.calls,0);
+    const root=await listFolders(parse(folder).root);assert.equal(root.parent,null);
+  }finally{f.close();}
+});
+
+test('folder picker rejects invalid, missing, and non-directory paths with a recoverable error',async()=>{
+  const f=fixture();try{
+    writeFileSync(join(f.dir,'file.txt'),'not a directory');
+    for(const input of [null,42,[],{},'relative/path'])await assert.rejects(()=>listFolders(input),error=>error.status===400);
+    await assert.rejects(()=>listFolders(join(f.dir,'missing')),error=>error.status===400&&/bulunamadı/.test(error.message));
+    await assert.rejects(()=>listFolders(join(f.dir,'file.txt')),error=>error.status===400&&/açılamıyor/.test(error.message));
+    assert.ok((await f.request('/api/social/library/folders',{folder:f.dir})).folders.length);
+  }finally{f.close();}
+});
 
 test('multi-account campaigns preserve distinct account targets, revisions and private tokens',async()=>{
   const f=fixture();try{

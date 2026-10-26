@@ -81,7 +81,7 @@ Find all your drafts and publication states in **Paylaşım kuyruğu** (Post que
 
 ## Use a video folder
 
-Open **Medya kütüphanesi** (Media library), enter the folder's full path, and click **Klasörü tara**. For example, on a Mac:
+Open **Medya kütüphanesi** (Media library), click **Klasör seç**, browse to your video folder, and click **Bu klasörü seç**. The folder path fills in automatically. Click **Klasörü tara** to import its videos. You can also enter a path manually, for example on a Mac:
 
 ```text
 /Users/YourName/Movies/SocialStudio

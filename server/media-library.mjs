@@ -2,8 +2,21 @@ import { randomUUID } from 'node:crypto';
 import { copyFile, readdir, lstat, realpath, mkdir, link, unlink, open } from 'node:fs/promises';
 import { join, resolve, basename, isAbsolute, dirname } from 'node:path';
 import { constants } from 'node:fs';
+import { homedir } from 'node:os';
 import { validateVideo, maxVideoBytes } from './video.mjs';
 import { bad } from './social-ai.mjs';
+
+export async function listFolders(input = '') {
+  if (typeof input !== 'string' || (input.trim() && !isAbsolute(input.trim()))) throw bad('Geçerli bir klasör yolu seçin.');
+  const folder = await realpath(input.trim() || homedir()).catch(() => { throw bad('Klasör bulunamadı veya erişilemiyor.'); });
+  let entries;
+  try { entries = await readdir(folder, { withFileTypes: true }); }
+  catch { throw bad('Bu klasör açılamıyor. Başka bir klasör seçin.'); }
+  const parent = dirname(folder);
+  return { folder, parent: parent === folder ? null : parent,
+    folders: entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+      .sort((a, b) => a.name.localeCompare(b.name, 'tr')).map(entry => ({ name: entry.name, path: join(folder, entry.name) })) };
+}
 
 export function insertMedia(store, { name, source = null, stored, kind, size }) {
   const id = randomUUID();

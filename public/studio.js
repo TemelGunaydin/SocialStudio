@@ -87,8 +87,8 @@ export function createStudio({ api, toast, openProject, openSetup }) {
   function empty(title, description, target) { return `<div class="s-empty"><span>${icon('spark')}</span><h3>${title}</h3><p>${description}</p>${target?`<button class="s-btn secondary" data-view="${target}">İçerik stüdyosunu aç ↗</button>`:''}</div>`; }
   function library() {
     return pageHeader('MEDYA KÜTÜPHANESİ','Videoların hazır. <span>Sıra seçimde.</span>','Videolarını bir kez ekle; her platform için uygun olanı seç.',`<button class="s-btn primary" data-action="upload">${icon('plus')} Video yükle</button>`) + `
-      <section class="s-panel s-folder-panel"><div class="s-section-title"><span class="s-stat-icon coral">${icon('media')}</span><div><h2>Video klasörünü bağla</h2><p>Bu uygulamanın çalıştığı bilgisayardaki klasör.</p></div></div><form id="s-folder-form"><label class="s-field" for="s-folder"><span>Klasörün tam yolu</span><input id="s-folder" value="${escape(state.folder)}" placeholder="/Users/adın/Movies/SosyalMedya" required></label><button class="s-btn secondary" type="submit">Klasörü tara</button></form><div class="s-folder-flow"><span><i class="s-dot blue"></i> Klasördeki MP4'ler</span><b>→</b><span><i class="s-dot violet"></i> AI veya manuel seçim</span><b>→</b><span><i class="s-dot green"></i> paylasildi/</span></div><p class="s-help">En fazla 100 MB / video. Alt klasörler taranmaz. Kaynak dosya, bağlı bütün paylaşımlar başarıyla tamamlandığında taşınır. Önizleme için yerel bir kopya korunur.</p></section>
-      <div class="s-section-title"><h2>Tüm medya</h2><span class="s-counter">${state.media.length} dosya</span></div>${state.media.length?`<div class="s-library-grid">${state.media.map(asset=>`<article class="s-media-card"><div class="s-asset-preview">${asset.kind==='video'?`<video controls preload="metadata" playsinline src="/api/videos/${asset.stored_name}" aria-label="${escape(asset.name)}"></video>`:`<img src="/api/images/${asset.stored_name}" alt="${escape(asset.name)}">`}<span class="s-asset-kind">${asset.kind==='video'?'MP4':'AI GÖRSEL'}</span></div><div class="s-asset-info"><h3>${escape(asset.name)}</h3><div><span>${(asset.size/1_000_000).toFixed(1)} MB</span><span class="s-status ${asset.status==='published'?'published':'draft'}">${asset.status==='published'?'Paylaşıldı':'Kullanılabilir'}</span></div>${asset.error?`<p class="s-error">${escape(asset.error)}</p><button class="s-btn secondary" data-archive="${asset.id}">Arşivlemeyi tekrar dene</button>`:''}</div></article>`).join('')}</div>`:empty('Kütüphanen yeni içeriklerini bekliyor.','Bir video yükle veya video klasörünün yolunu gir.')}`;
+      <section class="s-panel s-folder-panel"><div class="s-section-title"><span class="s-stat-icon coral">${icon('media')}</span><div><h2>Video klasörünü bağla</h2><p>Bu uygulamanın çalıştığı bilgisayardaki klasör.</p></div></div><form id="s-folder-form"><label class="s-field" for="s-folder"><span>Klasörün tam yolu</span><input id="s-folder" value="${escape(state.folder)}" placeholder="/Users/adın/Movies/SosyalMedya" required></label><button id="s-folder-choose" class="s-btn secondary" type="button" data-action="choose-folder">${icon('media')} Klasör seç</button><button class="s-btn primary" type="submit">Klasörü tara</button></form><div class="s-folder-flow"><span><i class="s-dot blue"></i> Klasördeki MP4'ler</span><b>→</b><span><i class="s-dot violet"></i> AI veya manuel seçim</span><b>→</b><span><i class="s-dot green"></i> paylasildi/</span></div><p class="s-help">En fazla 100 MB / video. Alt klasörler taranmaz. Kaynak dosya, bağlı bütün paylaşımlar başarıyla tamamlandığında taşınır. Önizleme için yerel bir kopya korunur.</p></section>
+      <div class="s-section-title"><h2>Tüm medya</h2><span class="s-counter">${state.media.length} dosya</span></div>${state.media.length?`<div class="s-library-grid">${state.media.map(asset=>`<article class="s-media-card"><div class="s-asset-preview">${asset.kind==='video'?`<video controls preload="metadata" playsinline src="/api/videos/${asset.stored_name}" aria-label="${escape(asset.name)}"></video>`:`<img src="/api/images/${asset.stored_name}" alt="${escape(asset.name)}">`}<span class="s-asset-kind">${asset.kind==='video'?'MP4':'AI GÖRSEL'}</span></div><div class="s-asset-info"><h3>${escape(asset.name)}</h3><div><span>${(asset.size/1_000_000).toFixed(1)} MB</span><span class="s-status ${asset.status==='published'?'published':'draft'}">${asset.status==='published'?'Paylaşıldı':'Kullanılabilir'}</span></div>${asset.error?`<p class="s-error">${escape(asset.error)}</p><button class="s-btn secondary" data-archive="${asset.id}">Arşivlemeyi tekrar dene</button>`:''}</div></article>`).join('')}</div>`:empty('Kütüphanen yeni içeriklerini bekliyor.','Bir video yükle veya video klasörünü seç.')}`;
   }
   function accounts() {
     return pageHeader('SOSYAL HESAPLAR','Birden fazla hesap. <span>Tek çalışma alanı.</span>','Her platforma istediğin hesabı bağla. Paylaşımın hangi hesaba gideceğini sen seç.') + `<div class="s-account-platforms">${['x','youtube','tiktok'].map(platform=>`<section class="s-panel s-account-panel ${platform}"><div class="s-platform-heading">${platformBadge(platform)}<div><h2>${names[platform]}</h2><p>${state.accounts.filter(account=>account.platform===platform).length} bağlı hesap</p></div></div><div class="s-account-list">${state.accounts.filter(account=>account.platform===platform).map(account=>`<div class="s-account-row"><span class="s-avatar ${platform}">${escape(account.name.slice(0,2).toUpperCase())}</span><div><strong>${escape(account.name)}</strong><small>${escape(account.username)}</small></div><button class="s-icon-btn" data-disconnect="${account.id}" aria-label="${escape(account.name)} bağlantısını kes">×</button></div>`).join('')||'<p class="s-muted">İlk hesabını bağlayarak başla.</p>'}</div>${state.connections[platform].configured?`<a class="s-btn secondary full" href="${platform==='x'?'/api/x/connect':`/api/social/oauth/${platform}/connect`}">${icon('plus')} ${names[platform]} hesabı bağla</a>`:'<button class="s-btn secondary full" data-view="settings">Developer API bilgilerini ekle ↗</button>'}<p class="s-help">${platform==='x'?'İkinci hesap için X izin ekranında o hesaba giriş yap. Her hesabın tokenı ayrı saklanır.':platform==='youtube'?'YouTube Data API v3 ve OAuth istemcisi gerekli. Denetlenmemiş API projelerinde yüklemeler gizli kalabilir.':'Content Posting API ve video.publish izni gerekli. TikTok özel kullanım araçlarını onaylamayabilir; onaysız istemcilerde yayın gizlidir.'}</p></section>`).join('')}</div><div class="s-bottom-note">${icon('accounts')} Aynı hesabı tekrar bağlamak izinlerini yeniler. Diğer hesaplarının bağlantısı korunur.</div>`;
@@ -137,6 +137,54 @@ export function createStudio({ api, toast, openProject, openSetup }) {
     }
     toast('Video kütüphaneye eklendi.'); await load();
   }
+  async function openFolderPicker() {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'modal s-folder-picker';
+    dialog.setAttribute('aria-labelledby', 's-folder-picker-title');
+    dialog.innerHTML = `<div class="s-section-title"><div><h2 id="s-folder-picker-title">Video klasörü seç</h2><p>Uygulamanın çalıştığı bilgisayardaki klasörler.</p></div><button type="button" class="s-icon-btn" data-folder-close aria-label="Klasör seçimini kapat">×</button></div>
+      <div class="s-folder-navigation"><button type="button" class="s-btn secondary" data-folder-home>Ana klasör</button><button type="button" class="s-btn secondary" data-folder-parent>↑ Üst klasör</button></div>
+      <p class="s-folder-path" aria-label="Açık klasör"></p><div class="s-folder-list" aria-busy="true"></div><p class="s-folder-feedback" role="status" aria-live="polite"></p>
+      <div class="s-folder-picker-actions"><button type="button" class="s-btn secondary" data-folder-close>Vazgeç</button><button type="button" class="s-btn primary" data-folder-confirm disabled>Bu klasörü seç</button></div>`;
+    const list = dialog.querySelector('.s-folder-list');
+    const feedback = dialog.querySelector('.s-folder-feedback');
+    const confirm = dialog.querySelector('[data-folder-confirm]');
+    const home = dialog.querySelector('[data-folder-home]');
+    const up = dialog.querySelector('[data-folder-parent]');
+    let current = '', parent = null, loading = false;
+    async function browse(folder = '') {
+      if (loading) return;
+      loading = true; confirm.disabled = true; home.disabled = true; up.disabled = true;
+      list.setAttribute('aria-busy', 'true'); feedback.textContent = 'Klasörler yükleniyor…';
+      feedback.classList.remove('s-error');
+      try {
+        const result = await api('/api/social/library/folders', 'POST', { folder });
+        if (!dialog.isConnected) return;
+        current = result.folder; parent = result.parent;
+        dialog.querySelector('.s-folder-path').textContent = current;
+        list.innerHTML = result.folders.length ? result.folders.map(entry => `<button type="button" class="s-btn secondary" data-folder-path="${escape(entry.path)}">${icon('media')}<span>${escape(entry.name)}</span><span aria-hidden="true">›</span></button>`).join('') : '<p class="s-help">Bu klasörde alt klasör yok. Bu klasörü seçebilirsin.</p>';
+        list.querySelectorAll('[data-folder-path]').forEach(button => button.addEventListener('click', () => browse(button.dataset.folderPath)));
+        feedback.textContent = `${result.folders.length} alt klasör. Videoların bulunduğu klasörü açıp seç.`;
+        confirm.disabled = false;
+        list.scrollTop = 0;
+      } catch (error) {
+        feedback.textContent = error.message; feedback.classList.add('s-error');
+      } finally {
+        loading = false; home.disabled = false; up.disabled = !parent;
+        list.setAttribute('aria-busy', 'false');
+      }
+    }
+    dialog.querySelectorAll('[data-folder-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    home.addEventListener('click', () => browse());
+    up.addEventListener('click', () => { if (parent) browse(parent); });
+    confirm.addEventListener('click', () => {
+      if (loading || !current) return;
+      $('#s-folder').value = current; dirty = true;
+      dialog.close(); $('#s-folder').focus();
+    });
+    document.body.append(dialog); dialog.showModal();
+    await browse($('#s-folder').value || state.folder || '');
+  }
   function bind() {
     root.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>run(button,async()=>{if(view==='compose')await savePost();go(button.dataset.view);})));
     root.querySelectorAll('[data-select]').forEach(button=>button.addEventListener('click',()=>run(button,async()=>{ if(view==='compose')await savePost();else workingContext=null;selected=button.dataset.select;go('compose');})));
@@ -144,6 +192,7 @@ export function createStudio({ api, toast, openProject, openSetup }) {
       const action=button.dataset.action;
       if(action==='project')return openProject();
       if(action==='refresh')return load();
+      if(action==='choose-folder')return openFolderPicker();
       if(action==='upload') {
         if(view==='compose')await savePost();
         const file=document.createElement('input');file.type='file';file.accept='video/mp4,.mp4';
@@ -194,7 +243,8 @@ export function createStudio({ api, toast, openProject, openSetup }) {
       await load();
       toast(result.reason || ({publish:'Paylaşım tamamlandı.',schedule:'Paylaşım planlandı.',image:result.attached?'Görsel eklendi.':'Görsel kütüphaneye eklendi. Video seçimin korundu.',generate:'Paylaşım metni hazır.',cancel:'Gönderi yeniden taslakta.',resolve:'Yayın durumu güncellendi.'}[action]||'Güncellendi.'));
     })));
-    $('#s-folder-form')?.addEventListener('submit',event=>{event.preventDefault();run(event.submitter,async()=>{const result=await api('/api/social/library/scan','POST',{folder:$('#s-folder').value});await load();toast(`${result.imported} video eklendi.${result.skipped.length?` ${result.skipped.length} dosya atlandı: ${result.skipped[0].error}`:''}`,Boolean(result.skipped.length));});});
+    $('#s-folder')?.addEventListener('input',()=>{dirty=true;});
+    $('#s-folder-form')?.addEventListener('submit',event=>{event.preventDefault();run(event.submitter,async()=>{const result=await api('/api/social/library/scan','POST',{folder:$('#s-folder').value});dirty=false;await load();toast(`${result.imported} video eklendi.${result.skipped.length?` ${result.skipped.length} dosya atlandı: ${result.skipped[0].error}`:''}`,Boolean(result.skipped.length));});});
     $('#s-settings-form')?.addEventListener('submit',event=>{event.preventDefault();run(event.submitter,async()=>{
       const body={OPENAI_API_KEY:$('#s-api-key').value.trim(),OPENAI_TEXT_MODEL:$('#s-text-model').value.trim(),OPENAI_IMAGE_MODEL:$('#s-image-model').value};
       for(const platform of ['x','youtube','tiktok']){const prefix=platform.toUpperCase();body[`${prefix}_CLIENT_ID`]=$(`#s-${platform}-id`).value.trim();body[`${prefix}_CLIENT_SECRET`]=$(`#s-${platform}-secret`).value.trim();}
