@@ -26,3 +26,4 @@ body{background:var(--s-bg);color:var(--s-ink)}.sidebar{width:248px;background:#
 .s-folder-picker-actions{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--s-line);padding-top:16px}
 .s-folder-picker :focus-visible{outline:3px solid #8c6ac2;outline-offset:3px}
 @media(max-width:580px){.s-folder-picker{padding:16px}.s-folder-list{max-height:40dvh}.s-folder-picker-actions>.s-btn{flex:1}.s-folder-panel form>.s-btn{min-height:44px}}
+.s-caption-hint{margin:0 0 24px}

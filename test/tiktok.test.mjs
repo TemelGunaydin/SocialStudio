@@ -13,6 +13,20 @@ import { linkedInInput } from '../server/linkedin.mjs';
 
 const caption = 'A simpler home for your ideas. Keep and search notes locally. #Mac #Productivity';
 
+test('manual TikTok captions use English feature lines and put the supplied link before hashtags',async()=>{
+  const old=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-only';
+  const lines=['✨ A simpler home for your ideas.','Meet Notes 📱','📝 Save your thoughts locally.','Try it today.','#Notes #Mac'];
+  const app={name:'Notes',platform:'Mac',features:['Local notes'],guardrail:'No cloud claims.'};
+  const draft={text:'Notlarını yerel kaydet.',feature:'Local notes',url:'https://example.com/notes'};
+  try{
+    const copy=await generateTikTokCopy(app,draft,async(_url,options)=>{
+      const body=JSON.parse(options.body);assert.match(body.instructions,/Always write the caption and title in English/);assert.match(body.instructions,/one blank line/);
+      return Response.json({output:[{content:[{type:'output_text',text:lines.join('\r\n')}]}]});
+    });
+    assert.equal(copy,[...lines.slice(0,-1),draft.url,lines.at(-1)].join('\n\n'));assert.equal(copy.split(draft.url).length,2);
+  }finally{if(old===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=old;}
+});
+
 test('TikTok captions have their own conservative limit, verified facts and no implicit social calls', async () => {
   assert.equal(linkedInInput({ text: 'x'.repeat(2200), revision: 0 }, 2200, 'TikTok').text.length, 2200);
   assert.throws(() => linkedInInput({ text: 'x'.repeat(2201), revision: 0 }, 2200, 'TikTok'), /TikTok.*2200/);

@@ -73,6 +73,8 @@ For connection details, see the [X setup guide in Turkish](docs/x-setup.md) or [
 5. In each account's editor, check the text and choose its media. Use **Video yükle** to upload an MP4, **AI video seçsin** to choose from your library, or **Görsel üret** to generate an image. YouTube and TikTok need a video; a generated image is saved to the library and does not become a video.
 6. Check the selected account, media preview, and any visibility or disclosure settings. Click **Taslağı kaydet** to save, **Şimdi paylaş** to publish, or **İleri bir zamana planla** to choose a publication time and approve it.
 
+TikTok AI captions are written in English, with an opening hook, emoji-led feature lines, a call to action, any supplied link, and a final hashtag line. Each content line is separated by a blank line. The structure uses your own product facts; it does not copy a fixed product example.
+
 For TikTok, refresh the account information, choose the audience, and confirm music use before publishing. Set commercial-content and AI disclosures when they apply.
 
 **Scheduling uses Istanbul time.** The computer and app must remain running. An approved post that misses its time can publish when you reopen the app. Failed or uncertain posts are not automatically retried; check the platform before trying again.

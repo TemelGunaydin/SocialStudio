@@ -58,6 +58,8 @@ X için [adım adım kurulum rehberi](x-setup.md), diğer teknik bağlantılar i
 5. Doğru hesabı seçtiğinden emin ol, medyayı önizle ve gerekiyorsa görünürlük ile içerik bildirimlerini düzenle.
 6. **Taslağı kaydet** ile sakla, **Şimdi paylaş** ile yayınla veya **İleri bir zamana planla** bölümünden zamanı seçip onayla.
 
+TikTok için AI metni İngilizce üretir. Giriş, emojili özellik satırları, kısa bir çağrı, varsa verdiğin bağlantı ve son satırdaki hashtag’ler boş satırlarla ayrılır. İçerik, kendi ürün bilgilerine göre hazırlanır.
+
 TikTok'ta hesap bilgilerini yenile, görünürlüğü seç ve müzik kullanım koşullarını onayla. İçerik reklam veya AI ile üretilmiş içerik kapsamındaysa ilgili seçenekleri de işaretle.
 
 Bütün taslaklarını ve yayın durumlarını **Paylaşım kuyruğu** sayfasında görebilirsin.

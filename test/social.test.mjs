@@ -73,10 +73,42 @@ test('context and selected Luna model are sent to Responses; filenames are metad
     let sent;
     const copy=await socialCopy({platform:'x',context:'Türkçe ve samimi yaz.',model:'gpt-6-luna',video:{name:'sesli-not.mp4'}},async(url,options)=>{sent=JSON.parse(options.body);assert.match(url,/\/responses$/);return aiResponse({title:'Yeni uygulama',text:'Sesli notların artık yazılı.'});});
     assert.equal(copy.text,'Sesli notların artık yazılı.');assert.equal(sent.model,'gpt-6-luna');assert.equal(sent.reasoning.effort,'low');assert.equal(sent.store,false);
+    assert.match(sent.instructions,/Match the language of the user context/);
+    assert.doesNotMatch(sent.instructions,/Always write the caption and title in English/);
     assert.equal(JSON.parse(sent.input).context,'Türkçe ve samimi yaz.');assert.equal(JSON.parse(sent.input).video_filename,'sesli-not.mp4');
     await assert.rejects(()=>selectVideo('context','x','gpt-6-luna',[{id:'good',name:'clip.mp4'}],async()=>aiResponse({id:'outside',reason:'bad'})),/kütüphane dışı/);
     await assert.rejects(()=>socialCopy({platform:'x',context:'x',model:'gpt-6-luna'},async()=>aiResponse({title:'Title',text:'😀'.repeat(141)})),/karakter/);
   }finally{if(old===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=old;}
+});
+
+test('TikTok generation requests English for Turkish context and separates every caption line',async()=>{
+  const old=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-key';
+  const lines=['✨ Ready to organize your ideas?','Meet Notes 📱','📝 Keep voice notes as text.','Start with your next idea.','https://example.com/notes','#Notes #Productivity'];
+  try{
+    let sent;
+    const raw=`  ${lines.join(' \r\n')}\n\n\n`;
+    const result=await socialCopy({platform:'tiktok',context:'Not uygulamamı Türkçe tanıt.',model:'gpt-6-luna'},async(_url,options)=>{sent=JSON.parse(options.body);return aiResponse({title:'Meet Notes',text:raw});});
+    assert.equal(result.text,lines.join('\n\n'));
+    assert.match(sent.instructions,/Always write the caption and title in English/);assert.match(sent.instructions,/one short emoji-led line per verified feature/);assert.match(sent.instructions,/one blank line/);assert.match(sent.instructions,/no Markdown bold/);
+    assert.doesNotMatch(sent.instructions,/Match the language of the user context|FindSkinCare/);assert.equal(JSON.parse(sent.input).context,'Not uygulamamı Türkçe tanıt.');
+    await assert.rejects(()=>socialCopy({platform:'tiktok',context:'Notes',model:'gpt-6-luna'},async()=>aiResponse({title:'Notes',text:Array(750).fill('aa').join('\n')})),/karakter/);
+    const youtubeText='Türkçe açıklama.\nTek satır aralığı korunur.';
+    assert.equal((await socialCopy({platform:'youtube',context:'Türkçe yaz.',model:'gpt-6-luna'},async()=>aiResponse({title:'Video',text:youtubeText}))).text,youtubeText);
+  }finally{if(old===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=old;}
+});
+
+test('TikTok caption line spacing survives generation, saving and queue reads without publication',async()=>{
+  const old=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-key';
+  const lines=['✨ Keep your ideas close.','Meet Notes 📱','📝 Save your thoughts as text.','Try it today.','#Notes #Productivity'];
+  const f=fixture({fetchImpl:async()=>aiResponse({title:'Meet Notes',text:lines.join('\n')})});
+  try{
+    const [post]=await f.create([{platform:'tiktok'}]);
+    const generated=(await f.request(`/api/social/posts/${post.id}/generate`)).post;
+    assert.equal(generated.text,lines.join('\n\n'));
+    const saved=await f.save(generated,{text:generated.text});
+    assert.equal(saved.text,generated.text);assert.equal(f.calls,0);
+    const state=await f.request('/api/social/state',null,'GET');assert.equal(state.posts.find(item=>item.id===post.id).text,generated.text);
+  }finally{f.close();if(old===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=old;}
 });
 
 test('folder scan validates MP4s, ignores subfolders/symlinks, and never duplicates imports',async()=>{
