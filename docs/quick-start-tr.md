@@ -9,7 +9,7 @@ Social Studio, sosyal medya hesapların için içerik hazırlayıp paylaşabilec
 - X için metin, görsel veya video paylaşımı hazırlayabilirsin.
 - YouTube için video başlığı ve açıklaması hazırlayıp video yükleyebilirsin.
 - TikTok için video ve açıklama hazırlayabilir, her gönderinin ayarlarını onaylayarak yayınlayabilirsin.
-- Yazdığın notlardan AI ile paylaşım metni ve görsel üretebilirsin.
+- Türkçe veya başka bir dilde yazdığın notlardan İngilizce paylaşım metni ve görsel üretebilirsin.
 - Luna dahil, hesabında erişimin olan modellerden seçim yapabilirsin.
 - Video klasörünü tanıtıp AI'ın dosya adlarına ve notlarına göre seçim yapmasını sağlayabilirsin.
 - X ve YouTube hesapların için düzenli otomatik paylaşım açabilirsin.
@@ -51,12 +51,14 @@ X için [adım adım kurulum rehberi](x-setup.md), diğer teknik bağlantılar i
 1. **İçerik stüdyosu** sayfasını aç.
 2. **Bağlam ve paylaşım notların** alanına ne anlatmak istediğini yaz. Örneğin:
 
-   > Uygulamam sesli notları metne dönüştürüyor. İçerik üreticilerine yönelik, kısa ve samimi bir Türkçe paylaşım yaz. Vermediğim özellikleri ekleme ve sonuç garantisi verme.
+   > Uygulamam sesli notları metne dönüştürüyor. İçerik üreticilerine yönelik, kısa ve samimi bir İngilizce paylaşım yaz. Vermediğim özellikleri ekleme ve sonuç garantisi verme.
 
 3. Modelini ve hedef hesaplarını seç. **Taslakları oluştur** düğmesine bas. Metni kendin yazacaksan **Metinleri AI ile hazırla** seçimini kaldır.
 4. Her hesabın düzenleme alanında metni kontrol et. **Video yükle** ile dosya ekle, kütüphaneden seç veya **AI video seçsin** düğmesini kullan. **Görsel üret** ile resim oluşturabilirsin. YouTube ve TikTok'ta yayın için video gerekir; görsel üretmek videoya dönüştürme yapmaz.
 5. Doğru hesabı seçtiğinden emin ol, medyayı önizle ve gerekiyorsa görünürlük ile içerik bildirimlerini düzenle.
 6. **Taslağı kaydet** ile sakla, **Şimdi paylaş** ile yayınla veya **İleri bir zamana planla** bölümünden zamanı seçip onayla.
+
+AI, bütün platformlar için paylaşım metnini İngilizce üretir; bağlamı Türkçe yazabilirsin. X metinleri kısa ve hashtagsizdir. YouTube başlık/açıklamaları ve LinkedIn AI taslakları da İngilizcedir.
 
 TikTok için AI metni İngilizce üretir. Giriş, emojili özellik satırları, kısa bir çağrı, varsa verdiğin bağlantı ve son satırdaki hashtag’ler boş satırlarla ayrılır. İçerik, kendi ürün bilgilerine göre hazırlanır.
 

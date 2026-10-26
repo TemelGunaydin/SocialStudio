@@ -48,6 +48,7 @@ test('LinkedIn AI uses verified facts, appends the link once, and rejects bad ou
     assert.equal(requests[0].url, 'https://api.openai.com/v1/responses');
     assert.equal(requests[0].body.store, false);
     assert.match(requests[0].body.instructions, /LinkedIn/);
+    assert.match(requests[0].body.instructions, /Always write the post text and title in English/);
     assert.match(requests[0].body.instructions, /untrusted/);
     assert.match(requests[0].body.instructions, /without inventing/);
     const input = JSON.parse(requests[0].body.input);

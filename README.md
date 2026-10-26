@@ -21,7 +21,7 @@ It is designed for one person managing their own accounts. You can connect more 
 
 You can also:
 
-- Generate text from your notes, audience, preferred language, and tone.
+- Generate English text from your notes, audience, and preferred tone. You can write your notes in another language.
 - Choose an OpenAI model, including Luna, and select a separate image model.
 - Give AI a video folder to choose from, using filenames and your notes.
 - Move successfully shared folder videos into `paylasildi/` automatically.
@@ -64,14 +64,16 @@ For connection details, see the [X setup guide in Turkish](docs/x-setup.md) or [
 ## Make your first post
 
 1. Open **İçerik stüdyosu** (Content studio).
-2. In **Bağlam ve paylaşım notların**, explain what you want to say. Include the facts, audience, language, and tone. For example:
+2. In **Bağlam ve paylaşım notların**, explain what you want to say. Include the facts, audience, and tone. AI-generated posts are always in English, even if your notes are in another language. For example:
 
-   > My app turns voice notes into text. Write in Turkish for content creators. Keep it short and friendly. Do not invent features or promise results.
+   > My app turns voice notes into text. Write in English for content creators. Keep it short and friendly. Do not invent features or promise results.
 
 3. Choose an AI model and the platforms or accounts to prepare drafts for.
 4. Click **Taslakları oluştur**. Leave **Metinleri AI ile hazırla** checked to generate text, or uncheck it to write your own.
 5. In each account's editor, check the text and choose its media. Use **Video yükle** to upload an MP4, **AI video seçsin** to choose from your library, or **Görsel üret** to generate an image. YouTube and TikTok need a video; a generated image is saved to the library and does not become a video.
 6. Check the selected account, media preview, and any visibility or disclosure settings. Click **Taslağı kaydet** to save, **Şimdi paylaş** to publish, or **İleri bir zamana planla** to choose a publication time and approve it.
+
+X AI posts are short, in English, and contain no hashtags. YouTube titles/descriptions and LinkedIn AI drafts are also written in English.
 
 TikTok AI captions are written in English, with an opening hook, emoji-led feature lines, a call to action, any supplied link, and a final hashtag line. Each content line is separated by a blank line. The structure uses your own product facts; it does not copy a fixed product example.
 

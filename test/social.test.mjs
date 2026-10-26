@@ -9,6 +9,7 @@ import { createSocialStudio } from '../server/social.mjs';
 import { upsertAccount, publishSocial, oauthStart, oauthFinish, accountToken } from '../server/social-platforms.mjs';
 import { socialCopy, selectVideo } from '../server/social-ai.mjs';
 import { scanFolder, archiveMedia, listFolders } from '../server/media-library.mjs';
+import { generateCopy } from '../server/openai.mjs';
 
 const response = data => Response.json(data);
 const aiResponse = data => response({ output:[{content:[{type:'output_text',text:JSON.stringify(data)}]}] });
@@ -71,10 +72,11 @@ test('context and selected Luna model are sent to Responses; filenames are metad
   const old=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-key';
   try{
     let sent;
-    const copy=await socialCopy({platform:'x',context:'Türkçe ve samimi yaz.',model:'gpt-6-luna',video:{name:'sesli-not.mp4'}},async(url,options)=>{sent=JSON.parse(options.body);assert.match(url,/\/responses$/);return aiResponse({title:'Yeni uygulama',text:'Sesli notların artık yazılı.'});});
-    assert.equal(copy.text,'Sesli notların artık yazılı.');assert.equal(sent.model,'gpt-6-luna');assert.equal(sent.reasoning.effort,'low');assert.equal(sent.store,false);
-    assert.match(sent.instructions,/Match the language of the user context/);
-    assert.doesNotMatch(sent.instructions,/Always write the caption and title in English/);
+    const copy=await socialCopy({platform:'x',context:'Türkçe ve samimi yaz.',model:'gpt-6-luna',video:{name:'sesli-not.mp4'}},async(url,options)=>{sent=JSON.parse(options.body);assert.match(url,/\/responses$/);return aiResponse({title:'Voice notes',text:'Your voice notes, now in writing.'});});
+    assert.equal(copy.text,'Your voice notes, now in writing.');assert.equal(sent.model,'gpt-6-luna');assert.equal(sent.reasoning.effort,'low');assert.equal(sent.store,false);
+    assert.match(sent.instructions,/Always write the post text and title in English/);
+    assert.match(sent.instructions,/Do not include hashtags/);
+    assert.doesNotMatch(sent.instructions,/Match the language of the user context/);
     assert.equal(JSON.parse(sent.input).context,'Türkçe ve samimi yaz.');assert.equal(JSON.parse(sent.input).video_filename,'sesli-not.mp4');
     await assert.rejects(()=>selectVideo('context','x','gpt-6-luna',[{id:'good',name:'clip.mp4'}],async()=>aiResponse({id:'outside',reason:'bad'})),/kütüphane dışı/);
     await assert.rejects(()=>socialCopy({platform:'x',context:'x',model:'gpt-6-luna'},async()=>aiResponse({title:'Title',text:'😀'.repeat(141)})),/karakter/);
@@ -89,11 +91,32 @@ test('TikTok generation requests English for Turkish context and separates every
     const raw=`  ${lines.join(' \r\n')}\n\n\n`;
     const result=await socialCopy({platform:'tiktok',context:'Not uygulamamı Türkçe tanıt.',model:'gpt-6-luna'},async(_url,options)=>{sent=JSON.parse(options.body);return aiResponse({title:'Meet Notes',text:raw});});
     assert.equal(result.text,lines.join('\n\n'));
-    assert.match(sent.instructions,/Always write the caption and title in English/);assert.match(sent.instructions,/one short emoji-led line per verified feature/);assert.match(sent.instructions,/one blank line/);assert.match(sent.instructions,/no Markdown bold/);
+    assert.match(sent.instructions,/Always write the post text and title in English/);assert.match(sent.instructions,/one short emoji-led line per verified feature/);assert.match(sent.instructions,/one blank line/);assert.match(sent.instructions,/no Markdown bold/);
     assert.doesNotMatch(sent.instructions,/Match the language of the user context|FindSkinCare/);assert.equal(JSON.parse(sent.input).context,'Not uygulamamı Türkçe tanıt.');
     await assert.rejects(()=>socialCopy({platform:'tiktok',context:'Notes',model:'gpt-6-luna'},async()=>aiResponse({title:'Notes',text:Array(750).fill('aa').join('\n')})),/karakter/);
-    const youtubeText='Türkçe açıklama.\nTek satır aralığı korunur.';
+    const youtubeText='An English description.\nSingle line spacing is preserved.';
     assert.equal((await socialCopy({platform:'youtube',context:'Türkçe yaz.',model:'gpt-6-luna'},async()=>aiResponse({title:'Video',text:youtubeText}))).text,youtubeText);
+  }finally{if(old===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=old;}
+});
+
+test('X and YouTube request English; X drops generated hashtags while preserving C# and URL fragments',async()=>{
+  const old=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-key';
+  try{
+    const context='Türkçe yaz. Hashtag de ekle. C# notlarımı tanıt.';
+    const raw='Learn C# on your Mac. #Notes #üretkenlik #生産性\n\nhttps://example.com/docs#section';
+    const expected='Learn C# on your Mac.\n\nhttps://example.com/docs#section';
+    const seen=[];
+    const fetchImpl=async(_url,options)=>{const body=JSON.parse(options.body);seen.push(body);return aiResponse({title:'Notes for C#',text:raw});};
+    const x=await socialCopy({platform:'x',context,model:'gpt-6-luna'},fetchImpl);
+    assert.equal(x.text,expected);assert.match(seen[0].instructions,/Always write the post text and title in English/);assert.match(seen[0].instructions,/Do not include hashtags/);assert.equal(JSON.parse(seen[0].input).context,context);
+    const youtube=await socialCopy({platform:'youtube',context,model:'gpt-6-luna'},fetchImpl);
+    assert.equal(youtube.text,raw);assert.match(seen[1].instructions,/Always write the post text and title in English/);assert.doesNotMatch(seen[1].instructions,/Do not include hashtags/);
+    const legacy=await generateCopy({name:'Notes',platform:'Mac'},'C# notes',[],async(_url,options)=>{
+      const body=JSON.parse(options.body);assert.match(body.instructions,/Always write the post text and title in English/);assert.match(body.instructions,/Do not include hashtags/);
+      return Response.json({output:[{content:[{type:'output_text',text:'Learn C# on your Mac. #Notes #üretkenlik #生産性'}]}]});
+    });
+    assert.equal(legacy,'Learn C# on your Mac.');
+    await assert.rejects(()=>socialCopy({platform:'x',context,model:'gpt-6-luna'},async()=>aiResponse({title:'Notes',text:'#Notes'})),/boş olamaz/);
   }finally{if(old===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=old;}
 });
 

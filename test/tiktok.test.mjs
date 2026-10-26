@@ -20,7 +20,7 @@ test('manual TikTok captions use English feature lines and put the supplied link
   const draft={text:'Notlarını yerel kaydet.',feature:'Local notes',url:'https://example.com/notes'};
   try{
     const copy=await generateTikTokCopy(app,draft,async(_url,options)=>{
-      const body=JSON.parse(options.body);assert.match(body.instructions,/Always write the caption and title in English/);assert.match(body.instructions,/one blank line/);
+      const body=JSON.parse(options.body);assert.match(body.instructions,/Always write the post text and title in English/);assert.match(body.instructions,/one blank line/);
       return Response.json({output:[{content:[{type:'output_text',text:lines.join('\r\n')}]}]});
     });
     assert.equal(copy,[...lines.slice(0,-1),draft.url,lines.at(-1)].join('\n\n'));assert.equal(copy.split(draft.url).length,2);
