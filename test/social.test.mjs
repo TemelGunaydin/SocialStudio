@@ -335,7 +335,7 @@ test('mixed media folders import images privately and shared images archive afte
 test('YouTube OAuth adds two channels, reconnects one in place, and rejects missing permissions',async()=>{
   const old={...process.env};Object.assign(process.env,{YOUTUBE_CLIENT_ID:'test-client',YOUTUBE_CLIENT_SECRET:'test-secret',PUBLIC_BASE_URL:'http://localhost:3000'});
   const f=fixture();try{
-    async function connect(id,scope='https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly') {
+    async function connect(id,scope='https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl') {
       const auth=new URL(oauthStart(f.store,'youtube'));assert.equal(auth.searchParams.get('access_type'),'offline');assert.equal(auth.searchParams.get('prompt'),'consent select_account');
       await oauthFinish(f.store,'youtube',auth.searchParams.get('state'),'code',async url=>url.includes('/token')?response({access_token:`token-${id}`,refresh_token:`refresh-${id}`,expires_in:3600,scope}):response({items:[{id,snippet:{title:id,customUrl:`@${id}`}}]}));
     }
@@ -498,4 +498,113 @@ test('existing media libraries upgrade without losing files or treating new uplo
     const uploaded=randomUUID();store.db.prepare('INSERT INTO media_library (id,name,stored_name,kind,size,created_at) VALUES (?,?,?,?,?,?)').run(uploaded,'New upload',`${randomUUID()}.jpg`,'image',300,'2026-01-02');store.db.close();store=openStore(dir);
     assert.equal(store.db.prepare('SELECT ai_generated FROM media_library WHERE id=?').get(uploaded).ai_generated,0);assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM media_library').get().n,2);
   }finally{store?.db.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+function youtubeScheduleFixture() {
+  const remote={at:null,privacy:'private',readsFail:false,mutationFail:false,uploadFail:false,uploadStatus:'processed',uploadStarts:0,uploads:0,updates:[],reads:0};
+  const f=fixture({publisher:publishSocial,fetchImpl:async(url,options)=>{
+    if(url.includes('/upload/youtube/v3/videos')){const body=JSON.parse(options.body);remote.uploadStarts++;remote.at=body.status.publishAt||null;remote.privacy=body.status.privacyStatus;remote.uploadBody=body;return new Response('',{headers:{location:'https://www.googleapis.com/upload/scheduled-session'}});}
+    if(url==='https://www.googleapis.com/upload/scheduled-session'){remote.uploads++;if(remote.uploadFail)throw new Error('lost upload response');return response({id:'scheduled-video'});}
+    if(url.includes('/youtube/v3/videos?')){
+      if(options.method==='PUT'){
+        const body=JSON.parse(options.body);assert.equal(body.id,'scheduled-video');remote.updates.push(body);remote.at=body.status.publishAt||null;remote.privacy=body.status.privacyStatus;if(remote.mutationFail)throw new Error('lost schedule update response');return response({id:body.id,status:body.status});
+      }
+      remote.reads++;if(remote.readsFail)throw new Error('status unavailable');
+      return response({items:[{id:'scheduled-video',snippet:{channelId:'channel-one'},status:{privacyStatus:remote.privacy,...(remote.at?{publishAt:remote.at}:{}),uploadStatus:remote.uploadStatus,license:'creativeCommon',embeddable:false,publicStatsViewable:false,selfDeclaredMadeForKids:true,containsSyntheticMedia:true}}]});
+    }
+    throw new Error('Unexpected schedule request: '+url);
+  }});
+  const folder=join(f.dir,'clips');mkdirSync(folder);writeFileSync(join(folder,'video.mp4'),mp4());
+  return {...f,remote,folder,async prepare(){await scanFolder(f.store,join(f.dir,'data'),folder);const media=f.store.db.prepare('SELECT * FROM media_library').get();const account=f.addAccount('youtube','channel-one');let [post]=await f.create([{platform:'youtube',accountId:account.id}]);return f.save(post,{mediaId:media.id,options:{privacy:'unlisted',madeForKids:true,aiGenerated:true}});}};
+}
+
+test('YouTube native scheduling uploads privately now, records the remote plan, and archives only after public confirmation',async()=>{
+  const f=youtubeScheduleFixture();try{
+    const post=await f.prepare(),at=new Date(Date.now()+7200000).toISOString();
+    await assert.rejects(()=>f.request(`/api/social/posts/${post.id}/schedule`,{at:new Date(Date.now()+60000).toISOString()}),/5 dakika/);assert.equal(f.remote.uploadStarts,0);
+    const result=await f.request(`/api/social/posts/${post.id}/schedule`,{at});assert.equal(result.post.status,'scheduled');assert.equal(result.post.remote_id,'scheduled-video');assert.equal(result.post.scheduled_at,at);
+    assert.equal(f.remote.uploadBody.status.privacyStatus,'private');assert.equal(f.remote.uploadBody.status.publishAt,at);assert.equal(f.remote.uploadBody.status.selfDeclaredMadeForKids,true);assert.equal(f.remote.uploadBody.status.containsSyntheticMedia,true);
+    assert.equal(f.remote.uploads,1);assert.ok(existsSync(join(f.folder,'video.mp4')));assert.equal(f.store.db.prepare('SELECT status FROM media_library').get().status,'available');
+    f.store.db.prepare("UPDATE social_posts SET scheduled_at='2000-01-01T00:00:00.000Z' WHERE id=?").run(post.id);await f.studio.scheduler();assert.equal(f.remote.uploads,1);
+    f.remote.privacy='public';f.remote.at=null;const synced=await f.request(`/api/social/posts/${post.id}/sync`);assert.equal(synced.post.status,'published');assert.equal(existsSync(join(f.folder,'video.mp4')),false);assert.equal(f.store.db.prepare('SELECT status FROM media_library').get().status,'published');
+    await assert.rejects(()=>f.request(`/api/social/posts/${post.id}/schedule`,{at}),/düzenlenemez/);assert.equal(f.remote.uploadStarts,1);
+  }finally{f.close();}
+});
+
+test('YouTube rescheduling and cancellation change the same video and preserve unrelated status settings',async()=>{
+  const f=youtubeScheduleFixture();try{
+    const post=await f.prepare(),at=new Date(Date.now()+3600000).toISOString(),later=new Date(Date.now()+7200000).toISOString();await f.request(`/api/social/posts/${post.id}/schedule`,{at});
+    const changed=await f.request(`/api/social/posts/${post.id}/schedule`,{at:later});assert.equal(changed.post.scheduled_at,later);assert.equal(f.remote.uploadStarts,1);
+    const status=f.remote.updates[0].status;assert.equal(status.license,'creativeCommon');assert.equal(status.embeddable,false);assert.equal(status.publicStatsViewable,false);assert.equal(status.selfDeclaredMadeForKids,true);assert.equal(status.containsSyntheticMedia,true);assert.equal(status.uploadStatus,undefined);assert.equal(status.privacyStatus,'private');
+    const cancelled=await f.request(`/api/social/posts/${post.id}/cancel`);assert.equal(cancelled.post.status,'uploaded');assert.equal(cancelled.post.scheduled_at,null);assert.equal(cancelled.post.error,null);assert.equal(f.remote.updates[1].status.publishAt,undefined);assert.equal(f.remote.privacy,'private');assert.ok(existsSync(join(f.folder,'video.mp4')));
+    await assert.rejects(()=>f.request(`/api/social/posts/${post.id}/publish`),/zaten|yüklü/);
+    await f.request(`/api/social/posts/${post.id}/schedule`,{at:later});assert.equal(f.remote.uploads,1);assert.equal(f.remote.updates.length,3);
+  }finally{f.close();}
+});
+
+test('ambiguous YouTube schedule mutations reconcile safely without creating duplicate uploads',async()=>{
+  const f=youtubeScheduleFixture();try{
+    const post=await f.prepare();await f.request(`/api/social/posts/${post.id}/schedule`,{at:new Date(Date.now()+3600000).toISOString()});
+    f.remote.mutationFail=true;await assert.rejects(()=>f.request(`/api/social/posts/${post.id}/cancel`),/lost schedule/);assert.equal(f.store.db.prepare('SELECT status FROM social_posts WHERE id=?').get(post.id).status,'uncertain');
+    f.remote.mutationFail=false;const restored=await f.request(`/api/social/posts/${post.id}/sync`);assert.equal(restored.post.status,'uploaded');assert.equal(f.remote.uploads,1);assert.equal(f.remote.at,null);assert.ok(existsSync(join(f.folder,'video.mp4')));
+  }finally{f.close();}
+});
+
+test('unknown YouTube upload or read results never become a confirmed plan and never retry an upload automatically',async()=>{
+  for(const mode of ['upload','read']){
+    const f=youtubeScheduleFixture();try{
+      const post=await f.prepare();f.remote.uploadFail=mode==='upload';f.remote.readsFail=mode==='read';
+      const scheduling=f.request(`/api/social/posts/${post.id}/schedule`,{at:new Date(Date.now()+3600000).toISOString()});
+      if(mode==='upload')await assert.rejects(()=>scheduling,error=>error.uncertain===true);else assert.equal((await scheduling).post.status,'uncertain');
+      let saved=f.store.db.prepare('SELECT * FROM social_posts WHERE id=?').get(post.id);assert.equal(saved.status,'uncertain');assert.ok(existsSync(join(f.folder,'video.mp4')));
+      await f.studio.scheduler();await assert.rejects(()=>f.request(`/api/social/posts/${post.id}/publish`),/yüklü|düzenlenemez/);assert.equal(f.remote.uploads,1);
+      if(mode==='read'){f.remote.readsFail=false;const synced=await f.request(`/api/social/posts/${post.id}/sync`);assert.equal(synced.post.status,'scheduled');assert.equal(f.remote.uploadStarts,1);}
+    }finally{f.close();}
+  }
+});
+
+test('native YouTube plans survive restart and reconnect to the same channel without another upload',async()=>{
+  const f=youtubeScheduleFixture();try{
+    const post=await f.prepare(),at=new Date(Date.now()+3600000).toISOString();await f.request(`/api/social/posts/${post.id}/schedule`,{at});
+    await f.request(`/api/social/accounts/${post.account_id}`,null,'DELETE');assert.equal(f.store.db.prepare('SELECT account_id FROM social_posts WHERE id=?').get(post.id).account_id,null);
+    const reconnected=f.addAccount('youtube','channel-one');
+    const recreated=createSocialStudio({store:f.store,dataDir:join(f.dir,'data'),configPath:join(f.dir,'.env'),readJson:async req=>req.body||{},reply:()=>{},publisher:()=>{throw new Error('Must not upload');},fetchImpl:async()=>response({items:[{id:'scheduled-video',snippet:{channelId:'channel-one'},status:{privacyStatus:'public',uploadStatus:'processed'}}]})});
+    await recreated.scheduler();const saved=f.store.db.prepare('SELECT * FROM social_posts WHERE id=?').get(post.id);assert.equal(saved.status,'published');assert.equal(saved.account_id,reconnected.id);assert.equal(f.remote.uploads,1);
+  }finally{f.close();}
+});
+
+test('X, Instagram, and TikTok schedule approved content locally with editable times and cancellation',async()=>{
+  const restore=publicMediaEnv();const sent=[];const f=fixture({publisher:async(_store,post)=>{sent.push(post.platform);return{id:post.id,url:'https://example.com/published'};}});try{
+    const folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());await scanFolder(f.store,join(f.dir,'data'),folder);const image=f.store.db.prepare('SELECT * FROM media_library').get();
+    const targets=['x','instagram','tiktok'].map(platform=>({platform,accountId:f.addAccount(platform,platform).id}));const posts=await f.create(targets);const at=new Date(Date.now()+3600000).toISOString();
+    for(let post of posts){let options=post.platform==='instagram'?{kind:'post'}:post.platform==='tiktok'?{privacy:'SELF_ONLY',consent:true}:{};post=await f.save(post,{mediaId:image.id,options});if(post.platform==='tiktok')post=await f.save(post,{mediaId:image.id,options});await f.request(`/api/social/posts/${post.id}/schedule`,{at});}
+    assert.deepEqual(sent,[]);const later=new Date(Date.now()+7200000).toISOString();assert.equal((await f.request(`/api/social/posts/${posts[0].id}/schedule`,{at:later})).post.scheduled_at,later);
+    const cancelled=await f.request(`/api/social/posts/${posts[0].id}/cancel`);assert.equal(cancelled.post.status,'draft');await f.request(`/api/social/posts/${posts[0].id}/schedule`,{at});
+    f.store.db.prepare("UPDATE social_posts SET scheduled_at='2000-01-01T00:00:00.000Z' WHERE status='scheduled'").run();await f.studio.scheduler();await f.studio.scheduler();assert.deepEqual(sent.sort(),['instagram','tiktok','x']);assert.equal(f.store.db.prepare('SELECT status FROM media_library').get().status,'published');
+  }finally{f.close();restore();}
+});
+
+test('legacy YouTube schedules without a remote ID still use the local queue when due',async()=>{
+  let received;const f=fixture({publisher:async(_store,post)=>{received=post;return{id:'legacy-video',url:'https://www.youtube.com/watch?v=legacy-video'};}});try{
+    const folder=join(f.dir,'clips');mkdirSync(folder);writeFileSync(join(folder,'video.mp4'),mp4());await scanFolder(f.store,join(f.dir,'data'),folder);const media=f.store.db.prepare('SELECT * FROM media_library').get(),account=f.addAccount('youtube','legacy');let [post]=await f.create([{platform:'youtube',accountId:account.id}]);post=await f.save(post,{mediaId:media.id});
+    f.store.db.prepare("UPDATE social_posts SET status='scheduled',scheduled_at='2000-01-01T00:00:00.000Z' WHERE id=?").run(post.id);await f.studio.scheduler();assert.equal(received.publish_at,undefined);assert.equal(f.store.db.prepare('SELECT status FROM social_posts WHERE id=?').get(post.id).status,'published');
+  }finally{f.close();}
+});
+
+test('YouTube processing and missing native schedules cannot be mistaken for a completed public publication',async()=>{
+  const f=youtubeScheduleFixture();try{
+    const post=await f.prepare();await f.request(`/api/social/posts/${post.id}/schedule`,{at:new Date(Date.now()+3600000).toISOString()});
+    f.remote.at=null;let synced=await f.request(`/api/social/posts/${post.id}/sync`);assert.equal(synced.post.status,'uploaded');assert.ok(existsSync(join(f.folder,'video.mp4')));
+    f.remote.privacy='public';f.remote.uploadStatus='uploaded';synced=await f.request(`/api/social/posts/${post.id}/sync`);assert.equal(synced.post.status,'uncertain');assert.ok(existsSync(join(f.folder,'video.mp4')));
+    f.remote.uploadStatus='processed';synced=await f.request(`/api/social/posts/${post.id}/sync`);assert.equal(synced.post.status,'published');assert.equal(existsSync(join(f.folder,'video.mp4')),false);assert.equal(f.remote.uploads,1);
+  }finally{f.close();}
+});
+
+test('YouTube schedule changes reject foreign channels and explain missing editing permission without publishing again',async()=>{
+  const {changeYouTubeSchedule}=await import('../server/social-platforms.mjs');const f=youtubeScheduleFixture();try{
+    const post=await f.prepare(),at=new Date(Date.now()+3600000).toISOString();const saved=(await f.request(`/api/social/posts/${post.id}/schedule`,{at})).post;
+    await assert.rejects(()=>changeYouTubeSchedule(f.store,saved,at,async()=>response({items:[{id:'scheduled-video',snippet:{channelId:'someone-else'},status:{privacyStatus:'private'}}]})),/bu YouTube kanalında/);
+    let writes=0;await assert.rejects(()=>changeYouTubeSchedule(f.store,saved,at,async(_url,options)=>{if(options.method==='PUT'){writes++;return Response.json({error:{message:'Insufficient permission'}},{status:403});}return response({items:[{id:'scheduled-video',snippet:{channelId:'channel-one'},status:{privacyStatus:'private',publishAt:at}}]});}),/yeniden bağlayıp video düzenleme iznini/);
+    assert.equal(writes,1);assert.equal(f.remote.uploadStarts,1);
+  }finally{f.close();}
 });

@@ -15,7 +15,7 @@ It is designed for one person managing their own accounts. You can connect more 
 | Platform | What you can publish | Automatic publishing |
 | --- | --- | --- |
 | Twitter / X | Text, with one image or one video | Publish now, schedule a post, or enable recurring posts |
-| YouTube | A video with a title, description, and optional custom thumbnail | Publish now, schedule a post, or enable recurring posts |
+| YouTube | A video with a title, description, and optional custom thumbnail | Publish now, upload now for YouTube to publish later, or enable recurring posts |
 | TikTok | A video or a single photo with a caption | Publish now or approve an individual scheduled post; no recurring flow |
 | Instagram | A JPEG image post or an MP4 Reel | Publish now, schedule a post, or enable recurring Reels |
 | LinkedIn | Prepare text and preview a video in the previous-draft tools | Copy the text and finish the upload on LinkedIn yourself |
@@ -72,7 +72,7 @@ For all four platforms, see the [step-by-step API setup guide](docs/platform-set
 3. Choose an AI model and the platforms or accounts to prepare drafts for.
 4. Click **Taslakları oluştur**. Leave **Metinleri AI ile hazırla** checked to generate text, or uncheck it to write your own.
 5. In each account's editor, check the text. Use **Klasörden / kütüphaneden seç** to browse media, scan a folder, search filenames, and select a preview. **Dosya yükle** uploads one image/video, **AI medya seçsin** chooses compatible library media, and **Görsel üret** generates an image. Instagram has a **Gönderi / Reels** selector. YouTube uses MP4 for the video and JPEG/PNG for an optional cover.
-6. Check the selected account, media preview, and any visibility or disclosure settings. Click **Taslağı kaydet** to save, **Şimdi paylaş** to publish, or **İleri bir zamana planla** to choose a publication time and approve it.
+6. Check the selected account, media preview, and any visibility or disclosure settings. Click **Taslağı kaydet** to save or choose **Şimdi paylaş** / **Tarih ve saat seç** in the visible **Yayın zamanı** section. For a future post, pick an Istanbul date/time and click **Onayla ve planla**, or **YouTube’a yükle ve planla** for YouTube.
 
 X AI posts are short, in English, and contain no hashtags. YouTube titles/descriptions and LinkedIn AI drafts are also written in English.
 
@@ -80,7 +80,18 @@ TikTok AI captions are written in English, with an opening hook, emoji-led featu
 
 For TikTok, refresh the account information, choose the audience, and confirm music use before publishing. Set commercial-content and AI disclosures when they apply.
 
-**Scheduling uses Istanbul time.** The computer and app must remain running. An approved post that misses its time can publish when you reopen the app. Failed or uncertain posts are not automatically retried; check the platform before trying again.
+**Scheduling uses Istanbul time (UTC+3).**
+
+| Platform | Where the plan runs | Must this computer stay on? |
+| --- | --- | --- |
+| YouTube | The video uploads privately now with YouTube’s `publishAt`; YouTube makes it public at the chosen time | No, after upload and schedule confirmation |
+| X, Instagram posts/Reels, TikTok | The dashboard sends the approved post through the platform API when due | Yes, keep the app running and the computer awake and online |
+
+Choose at least **5 minutes ahead for YouTube** or **30 seconds ahead for other platforms**. Video processing can delay YouTube publication. If the app was off for a local scheduled post, it sends the post when reopened. Existing YouTube plans made by earlier app versions remain in the local queue.
+
+Open **Paylaşım kuyruğu**, filter by **Planlandı**, and open a post to change its time or cancel. Canceling a YouTube plan leaves the uploaded video private; rescheduling updates that same video. YouTube schedules keep running if the dashboard closes or the account is disconnected. Reconnect the same channel to manage them. Older YouTube connections may need reauthorization for the additional video-editing permission.
+
+YouTube status is checked after uploading, on app startup, when due, and when you click **YouTube durumunu yenile**. Pending processing or uncertain results are checked again about every five minutes while the app is running. Folder originals are archived only after public publication is confirmed and all their other posts have completed. Failed or uncertain uploads are never automatically uploaded again.
 
 Find all your drafts and publication states in **Paylaşım kuyruğu** (Post queue).
 
@@ -121,7 +132,7 @@ Keep your computer and app running. Use **Otomatik akışı durdur** to stop fut
 
 - **AI and platform API usage may cost money.** Text generation, image generation, and AI video selection use your OpenAI account. Recurring flows can keep generating charges while enabled. Review provider billing and limits; the app does not enforce a spending cap.
 - **Instagram and TikTok photos need public HTTPS media delivery.** The app creates a signed URL for only the selected asset, valid for one hour. Set up your own HTTPS address as described in the [API setup guide](docs/platform-setup-tr.md). Instagram requires a professional Business/Creator account; TikTok also requires domain or URL-prefix verification for photos.
-- **A connection does not guarantee publication.** Your provider account must have the required API permissions. YouTube may restrict uploads from unverified API projects to private visibility. TikTok requires posting approval and may not approve a private tool for managing your own accounts. See [provider setup and restrictions](docs/advanced-usage.md#developer-api-setup-and-provider-limits).
+- **A connection does not guarantee publication.** Your provider account must have the required API permissions. YouTube account permissions, processing, and API policies still apply. TikTok requires posting approval and may not approve a private tool for managing your own accounts. See [provider setup and restrictions](docs/advanced-usage.md#developer-api-setup-and-provider-limits).
 - **Local storage does not mean everything stays offline.** Drafts and settings are stored on your computer. AI requests send the relevant notes, project information, and filenames to OpenAI. Publishing sends the selected text and media to the chosen platform.
 - **Keep a backup.** Stop the app and back up both `.env` and `data/` in the project folder. The packaged Mac app stores its separate profile in `~/Library/Application Support/Social Studio/`. See [backup and upgrade details](docs/advanced-usage.md#upgrading-an-existing-installation).
 
@@ -133,7 +144,7 @@ Keep your computer and app running. Use **Otomatik akışı durdur** to stop fut
 | AI generation fails | Check your API key, provider billing, and access to the selected model in **API ve modeller** |
 | Account connection fails | Make sure the developer credentials belong to the same app and the callback address matches exactly |
 | A video is missing from the library | Check its folder path, MP4 format, and the 100 MB limit, then scan again |
-| A scheduled post did not run | Keep the computer awake and the app running; check the queue and account permissions |
+| A scheduled post did not run | For X/Instagram/TikTok, keep the computer awake and app running. For YouTube, refresh its status and check video processing / permissions |
 | A post says **Kontrol gerekli** | Check your social account first; the publication may have succeeded before the connection was lost |
 
 ## More help

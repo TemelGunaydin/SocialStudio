@@ -27,6 +27,19 @@ body{background:var(--s-bg);color:var(--s-ink)}.sidebar{width:248px;background:#
 .s-folder-picker :focus-visible{outline:3px solid #8c6ac2;outline-offset:3px}
 @media(max-width:580px){.s-folder-picker{padding:16px}.s-folder-list{max-height:40dvh}.s-folder-picker-actions>.s-btn{flex:1}.s-folder-panel form>.s-btn{min-height:44px}}
 .s-caption-hint{margin:0 0 24px}
+.s-schedule-panel{padding:24px 0 0;border-top:1px solid var(--s-line);margin-top:24px}
+.s-schedule-panel h3{font-size:14px;font-weight:600;margin:0 0 16px}
+.s-publish-mode{display:flex;gap:8px;padding:4px;background:#edf1f5;border-radius:12px;margin-bottom:24px}
+.s-publish-mode button{flex:1;min-height:44px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--s-muted);font:inherit;font-size:13px;cursor:pointer;padding:8px 16px}
+.s-publish-mode button[aria-pressed=true]{color:#164f42;background:#fff;border-color:#c5d9d2;box-shadow:0 2px 4px #182b3a0a;font-weight:600}
+.s-schedule-panel .s-publish-actions{margin-top:24px}
+.s-schedule-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
+#s-schedule-fields .s-field{margin-bottom:8px}
+#s-schedule-at{min-width:0;width:100%}
+#s-queue-filter{padding:8px 12px;border:1px solid var(--s-line);border-radius:8px;background:#fff;color:var(--s-ink);font:inherit;font-size:12px;margin-left:auto;min-height:40px;max-width:100%}
+.s-section-title:has(#s-queue-filter){flex-wrap:wrap}
+.s-status.uploaded{background:#edf2f8;color:#365b7d}
+@media(max-width:580px){.s-publish-mode button{padding:8px;font-size:12px}.s-schedule-actions>.s-btn{flex:1}#s-queue-filter{order:3;width:100%;margin-left:0}.s-schedule-panel .s-publish-actions{flex-wrap:wrap}.s-schedule-panel .s-publish-actions>.s-btn{min-width:120px}}
 :root{--s-instagram:#9b3977}
 .platform-mark.instagram,.s-avatar.instagram{background:#faedf5;color:var(--s-instagram)}
 .s-target.instagram{border-color:#ebc7de;background:#fffafd}

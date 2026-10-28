@@ -25,9 +25,9 @@ Bu panel kendi geliştirici uygulamaların üzerinden paylaşım yapar. Sosyal m
 
 Taslak oluştururken iki kanalı da işaretleyebilirsin. Her kanalın metni, videosu, kapağı ve görünürlüğü ayrı düzenlenir. **Şimdi paylaş** ilgili taslağın seçili kanalına yükler.
 
-İstenen izinler: `youtube.upload` ve `youtube.readonly`. Özel kapak yükleyebilmek için kanalın bu özelliğe erişimi de olmalı. Video başarıyla yüklenir ama kapak reddedilirse panel videoyu yayınlandı olarak tutar ve kapak hatasını gösterir; ikinci bir video yüklemez.
+İstenen izinler: `youtube.upload`, `youtube.readonly` ve `youtube.force-ssl`. Son izin, yüklenmiş videonun yayın planını değiştirmek / iptal etmek için video düzenleme yetkisi sağlar. Eski bir bağlantıyla plan düzenleme izni hatası alırsan aynı kanalı yeniden bağla. Özel kapak yükleyebilmek için kanalın bu özelliğe erişimi de olmalı. Video başarıyla yüklenir ama kapak reddedilirse panel videoyu yayınlandı olarak tutar ve kapak hatasını gösterir; ikinci bir video yüklemez.
 
-Google'ın test modundaki izinleri süreli olabilir. Denetlenmemiş YouTube API projelerinin yüklemeleri gizliyle sınırlanabilir. Uygulama kodu bu sağlayıcı sınırlarını kaldıramaz. [Google OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [video yükleme](https://developers.google.com/youtube/data/reference/rest/v3/videos/insert), [özel kapak](https://developers.google.com/youtube/data/reference/rest/v3/thumbnails/set).
+Google'ın test modundaki izinleri süreli olabilir. Yayınlama, kanal izinlerine, video işleme sonucuna ve güncel YouTube API politikalarına bağlıdır. [Google OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [video yükleme](https://developers.google.com/youtube/data/reference/rest/v3/videos/insert), [özel kapak](https://developers.google.com/youtube/data/reference/rest/v3/thumbnails/set).
 
 ## Instagram: gönderi ve Reels
 
@@ -44,7 +44,7 @@ Google'ın test modundaki izinleri süreli olabilir. Denetlenmemiş YouTube API 
 
 - **Gönderi** için JPEG görsel seç.
 - **Reels** için MP4 video seç. **Reels profil akışında da görünsün** seçeneğini düzenle.
-- İngilizce metni kontrol edip **Şimdi paylaş** veya **İleri bir zamana planla** kullan.
+- İngilizce metni kontrol edip **Şimdi paylaş** veya **Tarih ve saat seç > Onayla ve planla** kullan.
 
 Panel medyayı hazırlar, Meta'nın işleme sonucunu bekler ve sonra yayınlar. Uzun süreli izinler kullanılır ve süresi dolmadan son yedi gün içinde kullanım sırasında yenilenir. Süresi tamamen dolmuş izinde hesabı tekrar bağlaman gerekir. [Instagram Login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/), [Meta'nın resmi API örnekleri](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api?entity=request-23987686-3fe78620-2258-44b6-893f-42d76c7200d7).
 
@@ -76,6 +76,19 @@ Instagram ve TikTok fotoğraf API'si dosyayı uygulamadan indirir. `localhost`, 
 6. `/api/social/delivery/` yolu ek bir proxy giriş ekranına yönlenmemeli. Sağlayıcıların imzalı dosyayı çerez olmadan okuyabilmesi gerekir. Bu yolun sorgu parametrelerini proxy erişim günlüklerinden çıkar.
 
 Panel yalnızca yayın için seçilen dosyanın bir saat geçerli imzalı bağlantısını üretir. İmza başka dosyada kullanılamaz; süre değiştirildiğinde geçersiz olur. Normal medya önizlemeleri, hesap bilgileri, klasör taraması ve yayın işlemleri sahip oturumu ister. Bu uygulama tek sahip içindir; çok kullanıcılı bir hizmet sunmaz.
+
+## Tarih ve saatle zamanlama
+
+İçerik stüdyosundaki **Yayın zamanı > Tarih ve saat seç** düğmesini kullan. Bütün saatler İstanbul (UTC+3) içindir.
+
+- **YouTube:** En az 5 dakika sonrası seç. **YouTube’a yükle ve planla** videoyu şimdi gizli yükler ve `status.publishAt` değerini YouTube’a kaydeder. Seçilen saatte video herkese açık olur. Yükleme ve plan onaylandıktan sonra bilgisayar kapalı olabilir. İşleme süresi yayını geciktirebilir.
+- **X, Instagram ve TikTok:** En az 30 saniye sonrası seçip **Onayla ve planla** düğmesine bas. Kuyruk yereldir; belirlenen saatte bilgisayarın uyanık, uygulamanın açık ve internetin bağlı olması gerekir. Saat kaçırılmışsa uygulama açıldığında gönderilir. TikTok’ta gönderinin görünürlük ve kullanım onayları planlamadan önce tamamlanır.
+
+**Paylaşım kuyruğu > Planlandı** üzerinden saati değiştir veya planı iptal et. YouTube’da aynı video güncellenir; plan iptali videoyu silmez, gizli olarak tutar. YouTube planı uygulama kapandığında veya hesap bağlantısı kesildiğinde devam eder. Aynı kanalı yeniden bağlayıp planı yönetebilirsin. **YouTube durumunu yenile** ile güncel planı ve yayını kontrol et. Yükleme sonrası, uygulama açılışında ve yayın saati geldiğinde de durum kontrol edilir. İşlemesi devam eden / belirsiz sonuçlar yaklaşık beş dakikada bir yeniden kontrol edilir; bu API kota kullanır. Gelecekteki doğrulanmış planlar yayın saatine kadar sürekli sorgulanmaz.
+
+YouTube için planlama sunucuya aktarıldıktan sonra yerel scheduler yeniden video yüklemez. Video gizliyken kaynak medya arşivlenmez; herkese açık yayın doğrulandığında ve dosyayı kullanan diğer gönderiler tamamlandığında arşivlenir. Eski sürümlerde oluşturulmuş YouTube planları yerel olarak çalışmayı sürdürür.
+
+Resmi API ayrıntıları: [YouTube publishAt](https://developers.google.com/youtube/data/reference/rest/v3/videos#status.publishAt), [YouTube video güncelleme ve izinleri](https://developers.google.com/youtube/data/reference/rest/v3/videos/update), [X gönderi oluşturma](https://docs.x.com/x-api/posts/manage-tweets/introduction), [Instagram yayınlama akışı](https://developers.facebook.com/docs/instagram-platform/content-publishing/), [TikTok Direct Post](https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post).
 
 ## Ortak medya ve düzenli paylaşım
 

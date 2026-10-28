@@ -11,7 +11,7 @@ Include the affected version/commit, operating system, impact and reproduction s
 ## Security boundaries
 
 - The default server listens only on `127.0.0.1`. First-owner setup requires the local, single-use setup link. Keep it private.
-- Authentication and same-origin checks protect configuration and publishing. Immediate and scheduled posts require owner approval. Recurring X/YouTube/Instagram Reels posts can publish automatically after the owner explicitly enables that flow.
+- Authentication and same-origin checks protect configuration and publishing. Immediate and scheduled posts require owner approval. YouTube native schedules upload the approved video immediately and continue on YouTube after this app stops; disconnecting the account does not cancel them. X/Instagram/TikTok schedules are dispatched by the local server when due. Recurring X/YouTube/Instagram Reels posts can publish automatically after the owner explicitly enables that flow.
 - New owner passwords are salted scrypt hashes. API keys and social-account OAuth tokens are **not encrypted at rest**: protect your OS account, enable disk encryption and restrict backups. Legacy `.env` passwords remain compatible and may be plaintext.
 - New installations disable scheduled paid generation until the owner enables it. Keys are saved locally; saving is not a live credential test.
 - URL import accepts public HTTPS HTML pages, checks DNS/redirect destinations and bounds the response. Imported text remains untrusted; source quotes do not prove an AI claim is true. Review all claims before saving or publishing.

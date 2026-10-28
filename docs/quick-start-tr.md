@@ -58,7 +58,7 @@ X için [adım adım kurulum rehberi](x-setup.md), YouTube / Instagram / TikTok 
 3. Modelini ve hedef hesaplarını seç. **Taslakları oluştur** düğmesine bas. Metni kendin yazacaksan **Metinleri AI ile hazırla** seçimini kaldır.
 4. Her hesabın düzenleme alanında metni kontrol et. **Klasörden / kütüphaneden seç** düğmesiyle klasör tara, dosyaları önizle, adla ara ve seç. **Dosya yükle**, **AI medya seçsin** ve **Görsel üret** seçenekleri de var. Instagram'da **Gönderi / Reels** türünü seç. YouTube için MP4 video ve istersen JPEG/PNG kapak kullan.
 5. Doğru hesabı seçtiğinden emin ol, medyayı önizle ve gerekiyorsa görünürlük ile içerik bildirimlerini düzenle.
-6. **Taslağı kaydet** ile sakla, **Şimdi paylaş** ile yayınla veya **İleri bir zamana planla** bölümünden zamanı seçip onayla.
+6. **Taslağı kaydet** ile sakla. **Yayın zamanı** bölümündeki **Şimdi paylaş** veya **Tarih ve saat seç** düğmesini kullan. Gelecek tarih için **Onayla ve planla**; YouTube’da **YouTube’a yükle ve planla** düğmesine bas.
 
 AI, bütün platformlar için paylaşım metnini İngilizce üretir; bağlamı Türkçe yazabilirsin. X metinleri kısa ve hashtagsizdir. YouTube başlık/açıklamaları ve LinkedIn AI taslakları da İngilizcedir.
 
@@ -68,7 +68,20 @@ TikTok'ta hesap bilgilerini yenile, görünürlüğü seç ve müzik kullanım k
 
 Bütün taslaklarını ve yayın durumlarını **Paylaşım kuyruğu** sayfasında görebilirsin.
 
-Planlama İstanbul saatine göredir. Bilgisayar ve uygulama açık olmalı. Plan saatinde kapalıysa onaylanmış gönderi uygulamayı tekrar açtığında yayınlanabilir. **Kontrol gerekli** durumunda önce platform hesabını kontrol et; gönderi yayınlanmış olabilir.
+### Tarih ve saate göre paylaşım
+
+| Platform | Nasıl çalışır? | Bilgisayar açık kalmalı mı? |
+| --- | --- | --- |
+| YouTube | Video şimdi gizli yüklenir; belirlediğin saatte YouTube tarafından herkese açık yayınlanır | Yükleme ve plan doğrulandıktan sonra hayır |
+| X, Instagram gönderi/Reels, TikTok | Panel, onayladığın paylaşımı zamanı gelince API ile gönderir | Evet; uygulama açık, bilgisayar uyanık ve internete bağlı olmalı |
+
+Tarih ve saat **İstanbul (UTC+3)** içindir. YouTube’da en az **5 dakika**, diğer platformlarda en az **30 saniye** sonrası seçilmeli. YouTube’un video işleme süresi yayını geciktirebilir. Yerel plan saatinde bilgisayar kapalıysa onaylanmış gönderi uygulama tekrar açıldığında yayınlanır.
+
+**Paylaşım kuyruğu > Planlandı** filtresinden gönderiyi aç. Yayın saatini değiştirebilir veya planı iptal edebilirsin. YouTube planını iptal etmek videoyu silmez; gizli bırakır. Tekrar planlamak aynı videoyu günceller, yeni yükleme yapmaz. Uygulamayı kapatmak veya hesap bağlantısını kesmek YouTube’daki planı iptal etmez.
+
+Eski YouTube bağlantılarında planı düzenlemek / iptal etmek için hesabı yeniden bağlayıp video düzenleme iznini onaylaman gerekebilir. **YouTube durumunu yenile** düğmesi güncel durumu kontrol eder. Yüklemeden sonra, uygulama açıldığında ve yayın saati geldiğinde de kontrol yapılır. İşlemesi devam eden veya belirsiz sonuçlar yaklaşık beş dakikada bir yeniden kontrol edilir. Dosya, YouTube’da herkese açık yayın doğrulandıktan ve diğer bağlı gönderiler tamamlandıktan sonra arşivlenir. Önceki sürümde oluşturulmuş YouTube planları yerel kuyrukta çalışmaya devam eder.
+
+**Kontrol gerekli** durumunda önce platform hesabını kontrol et; video yüklenmiş veya planlanmış olabilir. Belirsiz yükleme otomatik tekrarlanmaz.
 
 ## 4. Görsel/video klasörünü ekle
 
@@ -110,7 +123,7 @@ Instagram hesabın Business veya Creator olmalı. TikTok fotoğraflarında medya
 ## Ücretler ve verilerin
 
 - AI ile metin/görsel üretimi ve video seçimi, OpenAI hesabından ücretlendirilebilir. Platform API işlemleri de ücretli olabilir. Otomatik akış açıkken yeni ücretler oluşabilir; uygulama bir harcama sınırı uygulamaz.
-- Hesap bağlamak yayın iznini garanti etmez. YouTube bazı geliştirici hesaplarının yüklemelerini gizli tutabilir. TikTok yayın onayı ister ve kişisel hesap yönetimi araçlarını onaylamayabilir. Ayrıntılar [bağlantı rehberinde](advanced-usage.md#developer-api-setup-and-provider-limits).
+- Hesap bağlamak yayın iznini garanti etmez. YouTube’da hesap izinleri, işleme süreci ve API politikaları geçerlidir. TikTok yayın onayı ister ve kişisel hesap yönetimi araçlarını onaylamayabilir. Ayrıntılar [bağlantı rehberinde](advanced-usage.md#developer-api-setup-and-provider-limits).
 - Taslaklar ve ayarlar bilgisayarında saklanır. AI kullandığında ilgili notlar, proje bilgileri ve dosya adları OpenAI'a; yayın yaptığında seçtiğin metin ve medya ilgili platforma gönderilir.
 - Yedek almak için uygulamayı durdurup proje klasöründeki `.env` dosyasını ve `data/` klasörünü birlikte kopyala. Mac paketi bunları ayrı bir yerde saklar: `~/Library/Application Support/Social Studio/`.
 

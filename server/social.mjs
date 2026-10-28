@@ -9,11 +9,12 @@ import { saveImage, validateImageBytes } from './image.mjs';
 import { deliveryReady } from './media-delivery.mjs';
 import { insertMedia, scanFolder, archiveMedia, listFolders } from './media-library.mjs';
 import { textModels, imageModels, modelId, bad, socialCopy, selectVideo, selectMedia, validateCopy } from './social-ai.mjs';
-import { platforms, platformConfig, importXAccount, oauthStart, oauthFinish, creatorInfo, publishSocial, mediaFits } from './social-platforms.mjs';
+import { platforms, platformConfig, importXAccount, oauthStart, oauthFinish, creatorInfo, publishSocial, mediaFits, readYouTubeVideo, changeYouTubeSchedule } from './social-platforms.mjs';
 
 export function createSocialStudio({ store, dataDir, configPath, readJson, reply, fetchImpl = fetch, publisher = publishSocial, isConfigBusy = () => false }) {
   const db = store.db;
   const busy = new Set();
+  const youtubeChecks = new Map();
   let automationBusy = false;
   const stamp = () => new Date().toISOString();
   const posts = () => db.prepare(`SELECT p.*, a.name AS account_name, a.username AS account_username, m.name AS media_name, m.kind AS media_kind, m.stored_name
@@ -26,12 +27,12 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
   importXAccount(store);
   function availableVideos() {
     return db.prepare(`SELECT m.* FROM media_library m WHERE m.kind='video' AND m.status='available'
-      AND NOT EXISTS (SELECT 1 FROM social_posts p WHERE p.media_id=m.id AND p.status IN ('scheduled','publishing','published','uncertain')) ORDER BY m.created_at DESC LIMIT 100`).all();
+      AND NOT EXISTS (SELECT 1 FROM social_posts p WHERE p.media_id=m.id AND p.status IN ('scheduled','uploaded','publishing','published','uncertain')) ORDER BY m.created_at DESC LIMIT 100`).all();
   }
   function availableMedia(post) {
     return db.prepare(`SELECT m.* FROM media_library m WHERE m.status='available'
       AND NOT EXISTS (SELECT 1 FROM social_posts p WHERE (p.media_id=m.id OR json_extract(p.options,'$.thumbnailId')=m.id)
-      AND p.status IN ('scheduled','publishing','published','uncertain')) ORDER BY m.created_at DESC LIMIT 1000`).all()
+      AND p.status IN ('scheduled','uploaded','publishing','published','uncertain')) ORDER BY m.created_at DESC LIMIT 1000`).all()
       .filter(item => mediaFits(post.platform, item, JSON.parse(post.options))).slice(0, 100);
   }
   function validateTarget(platform, id) {
@@ -116,12 +117,52 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
       if (!options.privacy || options.consent !== true || asset?.kind === 'video' && (!Number.isFinite(options.duration) || options.duration <= 0)) throw bad('TikTok görünürlüğü, video önizlemesi ve müzik kullanım onayı gerekli.');
     }
   }
-  async function send(post) {
+  function scheduleTime(input, platform) {
+    const time = Date.parse(input.at);
+    const minimum = platform === 'youtube' ? 300_000 : 30_000;
+    if (!Number.isFinite(time) || time < Date.now() + minimum) throw bad(platform === 'youtube' ? 'YouTube için en az 5 dakika sonraki bir yayın zamanı seçin.' : 'En az 30 saniye sonraki bir yayın zamanı seçin.');
+    return new Date(time).toISOString();
+  }
+  async function syncYouTube(post) {
+    try {
+      const { video } = await readYouTubeVideo(store, post, fetchImpl);
+      const status = video.status;
+      let state = 'uploaded', at = null, error = null;
+      if (['failed','rejected','deleted'].includes(status.uploadStatus)) error = `YouTube videoyu yayınlamadı: ${status.rejectionReason || status.failureReason || status.uploadStatus}`;
+      else if (status.privacyStatus === 'public' && status.uploadStatus === 'processed') state = 'published';
+      else if (status.privacyStatus === 'public') { state = 'uncertain'; at = post.scheduled_at; error = 'YouTube videosu henüz işlenmiş olarak doğrulanmadı. Yeniden yüklenmez; durum tekrar kontrol edilir.'; }
+      else if (status.privacyStatus === 'private' && Number.isFinite(Date.parse(status.publishAt))) { state = 'scheduled'; at = new Date(status.publishAt).toISOString(); }
+      if (state === 'scheduled' && Date.parse(at) < Date.now()) error = 'YouTube yayın saati geçti; video henüz herkese açık değil. İşleme veya hesap durumunu kontrol edin.';
+      db.prepare('UPDATE social_posts SET status=?,scheduled_at=?,error=?,revision=revision+1,updated_at=? WHERE id=?')
+        .run(state, at, error || (post.error?.startsWith('Video yayınlandı, kapak yüklenemedi:') ? post.error : null), stamp(), post.id);
+      if (state === 'scheduled') youtubeChecks.set(post.id, Math.max(Date.now() + 300_000, Date.parse(at)));
+      else if (state === 'uncertain') youtubeChecks.set(post.id, Date.now() + 300_000);
+      else youtubeChecks.delete(post.id);
+      if (state === 'published') {
+        if (post.media_id) await archiveMedia(store, dataDir, post.media_id);
+        const thumbnailId = JSON.parse(post.options).thumbnailId;
+        if (thumbnailId) await archiveMedia(store, dataDir, thumbnailId);
+      }
+    } catch (error) {
+      db.prepare('UPDATE social_posts SET error=?,updated_at=? WHERE id=?').run(`YouTube durumu doğrulanamadı: ${error.message}`, stamp(), post.id);
+      throw error;
+    }
+    return getPost(post.id);
+  }
+  async function send(post, publishAt = null) {
     publishReady(post);
+    if (post.remote_id) throw bad('Bu video zaten YouTube’a yüklenmiş. Yayın planını düzenleyin; yeniden yüklenmez.', 409);
     if (!db.prepare("UPDATE social_posts SET status='publishing',error=NULL,updated_at=? WHERE id=? AND status IN ('draft','scheduled') AND revision=?").run(stamp(), post.id, post.revision).changes) throw bad('Gönderi değişti veya zaten işleniyor.', 409);
     try {
-      const result = await publisher(store, post, getMedia(post.media_id), dataDir, fetchImpl);
-      db.prepare("UPDATE social_posts SET status='published',remote_id=?,remote_url=?,error=?,updated_at=? WHERE id=?").run(result.id, result.url, result.warning || null, stamp(), post.id);
+      if (publishAt) db.prepare("UPDATE social_posts SET scheduled_at=?,options=json_set(options,'$.youtubeChannelId',?) WHERE id=?").run(publishAt, account(post.account_id).remote_id, post.id);
+      const result = await publisher(store, publishAt ? { ...post, publish_at: publishAt } : post, getMedia(post.media_id), dataDir, fetchImpl);
+      db.prepare('UPDATE social_posts SET status=?,remote_id=?,remote_url=?,error=?,updated_at=? WHERE id=?').run(publishAt ? 'scheduled' : 'published', result.id, result.url, result.warning || null, stamp(), post.id);
+      if (publishAt) {
+        youtubeChecks.set(post.id, Date.now() + 300_000);
+        try { await syncYouTube(getPost(post.id)); }
+        catch { db.prepare("UPDATE social_posts SET status='uncertain' WHERE id=?").run(post.id); }
+        return getPost(post.id);
+      }
       if (post.media_id) await archiveMedia(store, dataDir, post.media_id);
       const thumbnailId = JSON.parse(post.options).thumbnailId;
       if (thumbnailId) await archiveMedia(store, dataDir, thumbnailId);
@@ -132,8 +173,13 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
     return getPost(post.id);
   }
   async function scheduler() {
-    for (const post of db.prepare("SELECT * FROM social_posts WHERE status='scheduled' AND scheduled_at <= ? ORDER BY scheduled_at LIMIT 10").all(stamp())) {
+    for (const post of db.prepare("SELECT * FROM social_posts WHERE status='scheduled' AND remote_id IS NULL AND scheduled_at <= ? ORDER BY scheduled_at LIMIT 10").all(stamp())) {
       try { await locked(post.id, () => send(post)); } catch { /* persisted per post, never blindly retry */ }
+    }
+    for (const post of db.prepare("SELECT * FROM social_posts WHERE platform='youtube' AND status IN ('scheduled','uncertain') AND remote_id IS NOT NULL ORDER BY scheduled_at").all()
+      .filter(post => (youtubeChecks.get(post.id) || 0) <= Date.now()).slice(0, 20)) {
+      youtubeChecks.set(post.id, Date.now() + 300_000);
+      try { await locked(post.id, () => syncYouTube(getPost(post.id))); } catch { /* Read-only reconciliation. A failure cannot create another video. */ }
     }
     const rule = getAutomation();
     if (!rule.enabled || automationBusy || rule.nextAt > stamp()) return;
@@ -262,6 +308,21 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
     if (req.method === 'POST' && match) return locked(match[1], async () => {
       const post = getPost(match[1]); if (!post) throw bad('Gönderi bulunamadı.', 404);
       const action = match[2] || 'save';
+      if (post.platform === 'youtube' && post.remote_id && ['scheduled','uploaded','uncertain'].includes(post.status)) {
+        if (action === 'sync') return respond({ post: await syncYouTube(post) });
+        if (action === 'schedule' || action === 'cancel') {
+          const at = action === 'schedule' ? scheduleTime(await readJson(req, 2048), 'youtube') : null;
+          try { await changeYouTubeSchedule(store, post, at, fetchImpl); return respond({ post: await syncYouTube(post) }); }
+          catch (error) { youtubeChecks.set(post.id, Date.now() + 300_000); db.prepare("UPDATE social_posts SET status='uncertain',error=?,updated_at=? WHERE id=?").run(error.message, stamp(), post.id); throw error; }
+        }
+        throw bad('Bu video YouTube’da yüklü. Durumu yenileyin veya mevcut yayın planını düzenleyin.', 409);
+      }
+      if (action === 'schedule' && post.status === 'scheduled' && !post.remote_id) {
+        publishReady(post);
+        const at = scheduleTime(await readJson(req, 2048), post.platform);
+        db.prepare('UPDATE social_posts SET scheduled_at=?,revision=revision+1,updated_at=? WHERE id=?').run(at, stamp(), post.id);
+        return respond({ post: getPost(post.id) });
+      }
       if (action === 'cancel' && ['scheduled','failed'].includes(post.status)) {
         db.prepare("UPDATE social_posts SET status='draft',scheduled_at=NULL,revision=revision+1 WHERE id=?").run(post.id); return respond({ post: getPost(post.id) });
       }
@@ -316,9 +377,9 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
       if (action === 'publish') return respond({ post: await send(post) });
       if (action === 'schedule') {
         const input = await readJson(req, 2048); publishReady(post);
-        const time = Date.parse(input.at);
-        if (!Number.isFinite(time) || time < Date.now() + 30_000) throw bad('En az 30 saniye sonraki bir yayın zamanı seçin.');
-        db.prepare("UPDATE social_posts SET status='scheduled',scheduled_at=?,revision=revision+1,updated_at=? WHERE id=?").run(new Date(time).toISOString(), stamp(), post.id);
+        const at = scheduleTime(input, post.platform);
+        if (post.platform === 'youtube') return respond({ post: await send(post, at) });
+        db.prepare("UPDATE social_posts SET status='scheduled',scheduled_at=?,revision=revision+1,updated_at=? WHERE id=?").run(at, stamp(), post.id);
         return respond({ post: getPost(post.id) });
       }
       throw bad('İşlem bulunamadı.', 404);

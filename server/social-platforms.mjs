@@ -20,7 +20,7 @@ export function mediaFits(platform, media, options = {}) {
 }
 const refreshes = new Map();
 const definitions = {
-  youtube: { auth: 'https://accounts.google.com/o/oauth2/v2/auth', token: 'https://oauth2.googleapis.com/token', prefix: 'YOUTUBE', scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly' },
+  youtube: { auth: 'https://accounts.google.com/o/oauth2/v2/auth', token: 'https://oauth2.googleapis.com/token', prefix: 'YOUTUBE', scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl' },
   tiktok: { auth: 'https://www.tiktok.com/v2/auth/authorize/', token: 'https://open.tiktokapis.com/v2/oauth/token/', prefix: 'TIKTOK', scope: 'user.info.basic,video.publish' },
   instagram: { auth: 'https://www.instagram.com/oauth/authorize', prefix: 'INSTAGRAM', scope: 'instagram_business_basic,instagram_business_content_publish' }
 };
@@ -119,6 +119,36 @@ export async function creatorInfo(store, account, fetchImpl = fetch) {
   return (await json(await fetchImpl('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', { method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(20_000) }), 'TikTok hesap bilgisi')).data;
 }
+export async function readYouTubeVideo(store, post, fetchImpl = fetch) {
+  if (post.platform !== 'youtube' || !post.remote_id) throw bad('YouTube video bağlantısı bulunamadı.');
+  const channelId = JSON.parse(post.options).youtubeChannelId;
+  const account = store.db.prepare("SELECT * FROM social_accounts WHERE platform='youtube' AND (id=? OR remote_id=?) ORDER BY id=? DESC LIMIT 1")
+    .get(post.account_id, channelId || '', post.account_id);
+  if (!account) throw bad('YouTube planı platformda devam eder. Durumu yönetmek için aynı kanalı yeniden bağlayın.');
+  const token = await accountToken(store, account, fetchImpl);
+  const result = await json(await fetchImpl(`https://www.googleapis.com/youtube/v3/videos?part=status,snippet&id=${encodeURIComponent(post.remote_id)}`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000)
+  }), 'YouTube yayın durumu');
+  const video = result.items?.find(item => item.id === post.remote_id);
+  if (!video?.status || video.snippet?.channelId !== account.remote_id) throw bad('Video bu YouTube kanalında bulunamadı. YouTube Studio üzerinden kontrol edin.');
+  if (!post.account_id) store.db.prepare('UPDATE social_posts SET account_id=? WHERE id=?').run(account.id, post.id);
+  return { video, token };
+}
+export async function changeYouTubeSchedule(store, post, at, fetchImpl = fetch) {
+  const { video, token } = await readYouTubeVideo(store, post, fetchImpl);
+  if (video.status.privacyStatus !== 'private') throw bad('Video artık gizli değil. Güncel yayın durumunu yenileyin; yeni bir yükleme yapılmadı.');
+  const status = Object.fromEntries(['license','embeddable','publicStatsViewable','selfDeclaredMadeForKids','containsSyntheticMedia']
+    .filter(key => video.status[key] !== undefined).map(key => [key, video.status[key]]));
+  status.privacyStatus = 'private';
+  if (at) status.publishAt = at;
+  const response = await fetchImpl('https://www.googleapis.com/youtube/v3/videos?part=status', {
+    method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: post.remote_id, status }), signal: AbortSignal.timeout(30_000)
+  });
+  if (response.status === 403) throw bad('YouTube planını yönetmek için hesabı yeniden bağlayıp video düzenleme iznini onaylayın.');
+  const updated = await json(response, 'YouTube planı');
+  if (updated.id !== post.remote_id) throw bad('YouTube plan değişikliği doğrulanamadı. Durumu yenileyin; video yeniden yüklenmez.');
+}
 function uploadUrl(value, platform) {
   let url;
   try { url = new URL(value); } catch { throw bad('API güvenli bir yükleme adresi döndürmedi.'); }
@@ -178,10 +208,13 @@ export async function publishSocial(store, post, media, dataDir, fetchImpl = fet
   const options = JSON.parse(post.options);
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   if (post.platform === 'youtube') {
+    if (post.publish_at && (!Number.isFinite(Date.parse(post.publish_at)) || Date.parse(post.publish_at) <= Date.now() + 30_000)) throw bad('YouTube yayın zamanı yükleme başlamadan önce gelecekte olmalı.');
     const response = await fetchImpl('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
       method: 'POST', headers: { ...headers, 'X-Upload-Content-Type': 'video/mp4', 'X-Upload-Content-Length': String(size) },
       body: JSON.stringify({ snippet: { title: post.title, description: post.text, categoryId: '22' }, status: {
-        privacyStatus: options.privacy || 'private', selfDeclaredMadeForKids: Boolean(options.madeForKids), containsSyntheticMedia: Boolean(options.aiGenerated)
+        privacyStatus: post.publish_at ? 'private' : options.privacy || 'private',
+        ...(post.publish_at ? { publishAt: post.publish_at } : {}),
+        selfDeclaredMadeForKids: Boolean(options.madeForKids), containsSyntheticMedia: Boolean(options.aiGenerated)
       } }), signal: AbortSignal.timeout(30_000), redirect: 'error'
     });
     if (!response.ok) await json(response, 'YouTube video başlatma');
