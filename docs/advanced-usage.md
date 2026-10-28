@@ -6,9 +6,12 @@ This page covers developer connections, Mac packaging, backups, phone access, an
 
 ## Developer API setup and provider limits
 
+Use the dashboard’s three-step connection guide or the [complete Turkish setup guide](platform-setup-tr.md) for exact OAuth steps, multiple YouTube channels, and public HTTPS media delivery.
+
 - **X:** OAuth 2.0 client with read/write, `media.write`, and offline access. Copy the displayed `/api/x/callback` URL to X Console. Each account uses its own token, including refresh. [X setup guide](x-setup.md).
 - **YouTube:** Enable YouTube Data API v3 in Google Cloud and create a Web OAuth client. Register the callback shown in settings. Authorization requests upload and channel-read scopes. The app uploads via the [resumable upload protocol](https://developers.google.com/youtube/data/guides/using_resumable_upload_protocol), preserving the reviewed title, description, visibility, children-content setting, and synthetic-content declaration. Uploads from unverified API projects may be restricted to private visibility; uploading does not guarantee immediate processing/public availability.
-- **TikTok:** Enable Login Kit and Content Posting API and obtain `video.publish` approval. Register the displayed HTTPS callback URL. Current creator privacy options, video duration, interactions, music consent, and commercial/AI disclosures are checked before direct video publication. [TikTok's guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines) restrict unaudited clients to private posting and state that private utilities for accounts you or your team manage are not an acceptable intended use for approval. This integration cannot guarantee approval or public publishing for this local-only app. Manual sharing remains available in the previous-draft tools.
+- **Instagram:** Instagram API with Instagram Login uses `instagram_business_basic` and `instagram_business_content_publish`. Each Business/Creator account has a separate long-lived token, refreshed on use during its final seven days. Expired tokens require reconnecting. JPEG posts and MP4 Reels use container creation, bounded processing checks, and an explicit publish request. Temporary signed media URLs expire after one hour. Accounts outside app roles may require App Review / Advanced Access.
+- **TikTok:** Enable Login Kit and Content Posting API and obtain `video.publish` approval. Register the displayed HTTPS callback URL. Current creator privacy options, video duration, interactions, music consent, and commercial/AI disclosures are checked before direct video publication. Single-photo Direct Post uses JPEG/WebP, a signed public HTTPS URL, and a TikTok-verified domain or URL prefix; photos also require creator privacy and consent. [TikTok's guidelines](https://developers.tiktok.com/docs/en/content-sharing-guidelines) restrict unaudited clients to private posting and state that private utilities for accounts you or your team manage are not an acceptable intended use for approval. This integration cannot guarantee approval or public publishing for this local-only app. Manual sharing remains available in the previous-draft tools.
 
 OAuth connection, copying text, selecting media, and saving a draft do not publish. Local/provider tests use mocked network responses and isolated local profiles. No live paid AI generation or social publication is performed by the test suite.
 
@@ -21,7 +24,7 @@ Open `dist/Social Studio.app` after building it locally with `npm run package:ma
 1. **Choose a dashboard password.** Save it in your password manager. Newly created passwords are stored as salted hashes, not plaintext.
 2. **Paste your OpenAI API key in API and models.** The settings page links directly to key creation. Key fields are masked, and saved keys are never sent back to the browser. Saving only updates local configuration - it does not make an API request or validate the key. You can start with manual drafts without OpenAI.
 3. **Write your context in Content studio.** Optionally add a project URL, review the suggested project information, and save it.
-4. **Connect your own developer apps.** Save X, YouTube, or TikTok client credentials in settings, copy the displayed callback URLs, and authorize your accounts from Social accounts. See the [detailed X setup guide](x-setup.md).
+4. **Connect your own developer apps.** Save X, YouTube, TikTok, or Instagram client credentials in settings, copy the displayed callback URLs, and authorize your accounts from Social accounts. See the [detailed X setup guide](x-setup.md).
 5. **Create your first drafts.** Choose target platforms/accounts and a model. Recurring publishing is **disabled by default** and requires explicit opt-in in Automatic flow. Previous daily X drafts remain a separate feature under Previous X drafts.
 
 You can update your keys later through **API and models** without restarting. Leaving a field blank preserves its saved value. Changing X credentials disconnects the existing account and invalidates pending OAuth requests.
@@ -114,7 +117,7 @@ Replace `MAC_TAILSCALE_IP` with the actual address. Restart the server and open 
 
 Alternatively, use [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) to expose the local server over HTTPS. Keep `HOST=127.0.0.1` and set `PUBLIC_BASE_URL` to the Serve URL.
 
-Do not expose the dashboard to the public internet. It does not provide separate user accounts or tenant isolation.
+Tailscale Serve is private to your tailnet and cannot deliver media to Instagram or TikTok. For those features use a public HTTPS reverse proxy as described in the [API guide](platform-setup-tr.md); the dashboard remains a single-owner tool without tenant isolation.
 
 ## Building the Mac package (developers)
 

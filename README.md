@@ -4,7 +4,7 @@
 
 **Manage your social accounts, prepare posts, and publish from one place.**
 
-Social Studio runs on your computer and opens in your browser. Write what you want to share, choose the accounts, add a video or image, and review your post. You can also let AI write the text or choose a video from your folder.
+Social Studio runs on your computer and opens in your browser. Write what you want to share, choose the accounts, add a video or image, and review your post. You can also let AI write the text or choose suitable media from your folder.
 
 It is designed for one person managing their own accounts. You can connect more than one account on the same platform, such as a personal X account and a business X account.
 
@@ -15,19 +15,20 @@ It is designed for one person managing their own accounts. You can connect more 
 | Platform | What you can publish | Automatic publishing |
 | --- | --- | --- |
 | Twitter / X | Text, with one image or one video | Publish now, schedule a post, or enable recurring posts |
-| YouTube | A video with a title and description | Publish now, schedule a post, or enable recurring posts |
-| TikTok | A video with a caption | Publish now or approve an individual scheduled post; no recurring flow |
+| YouTube | A video with a title, description, and optional custom thumbnail | Publish now, schedule a post, or enable recurring posts |
+| TikTok | A video or a single photo with a caption | Publish now or approve an individual scheduled post; no recurring flow |
+| Instagram | A JPEG image post or an MP4 Reel | Publish now, schedule a post, or enable recurring Reels |
 | LinkedIn | Prepare text and preview a video in the previous-draft tools | Copy the text and finish the upload on LinkedIn yourself |
 
 You can also:
 
 - Generate English text from your notes, audience, and preferred tone. You can write your notes in another language.
 - Choose an OpenAI model, including Luna, and select a separate image model.
-- Give AI a video folder to choose from, using filenames and your notes.
-- Move successfully shared folder videos into `paylasildi/` automatically.
+- Give AI an image/video folder to choose from, using filenames and your notes.
+- Move successfully shared folder media into `paylasildi/` automatically.
 - Keep separate drafts, media selections, and publication states for each account.
 
-**You control publishing.** Creating a draft does not publish it. Recurring X/YouTube publishing starts only after you explicitly enable it.
+**You control publishing.** Creating a draft does not publish it. Recurring X/YouTube/Instagram Reels publishing starts only after you explicitly enable it.
 
 ## Start the app
 
@@ -54,12 +55,12 @@ You can prepare manual drafts before adding any API keys or connecting accounts.
 An **API connection** lets Social Studio communicate with another service with your permission. These connections use your own provider accounts and may require credits, billing setup, or approval.
 
 1. Open **API ve modeller** (API and models). Add your OpenAI API key if you want AI features. Choose a text model and an image model. For example, you can select Luna for text and GPT Image Mini for images, if your API account has access.
-2. On the same page, add the developer app details for each platform you want to use. Copy the **Callback / yönlendirme adresi** shown there into that provider's app settings. This is the address the provider uses to return you to Social Studio after authorization.
-3. Open **Sosyal hesaplar** (Social accounts) and connect an account. Repeat to add another account, including another account on the same platform.
+2. Open **Sosyal hesaplar** and click **Bağlantıyı hazırla** for the platform. Its three-step guide links to the developer portal, provides a copyable redirect URL, and lets you save your app credentials and start OAuth.
+3. Approve access on the provider page. Use **Başka hesap ekle** to add another account. For YouTube, select the Google account and channel each time; each channel keeps its own authorization.
 
 You do not enter your social account passwords into Social Studio. You approve access on the provider's own page. Leaving a saved credential field blank keeps its current value.
 
-For connection details, see the [X setup guide in Turkish](docs/x-setup.md) or [advanced API setup](docs/advanced-usage.md#developer-api-setup-and-provider-limits).
+For all four platforms, see the [step-by-step API setup guide](docs/platform-setup-tr.md) or [advanced API setup](docs/advanced-usage.md#developer-api-setup-and-provider-limits).
 
 ## Make your first post
 
@@ -70,7 +71,7 @@ For connection details, see the [X setup guide in Turkish](docs/x-setup.md) or [
 
 3. Choose an AI model and the platforms or accounts to prepare drafts for.
 4. Click **Taslakları oluştur**. Leave **Metinleri AI ile hazırla** checked to generate text, or uncheck it to write your own.
-5. In each account's editor, check the text and choose its media. Use **Video yükle** to upload an MP4, **AI video seçsin** to choose from your library, or **Görsel üret** to generate an image. YouTube and TikTok need a video; a generated image is saved to the library and does not become a video.
+5. In each account's editor, check the text. Use **Klasörden / kütüphaneden seç** to browse media, scan a folder, search filenames, and select a preview. **Dosya yükle** uploads one image/video, **AI medya seçsin** chooses compatible library media, and **Görsel üret** generates an image. Instagram has a **Gönderi / Reels** selector. YouTube uses MP4 for the video and JPEG/PNG for an optional cover.
 6. Check the selected account, media preview, and any visibility or disclosure settings. Click **Taslağı kaydet** to save, **Şimdi paylaş** to publish, or **İleri bir zamana planla** to choose a publication time and approve it.
 
 X AI posts are short, in English, and contain no hashtags. YouTube titles/descriptions and LinkedIn AI drafts are also written in English.
@@ -83,29 +84,29 @@ For TikTok, refresh the account information, choose the audience, and confirm mu
 
 Find all your drafts and publication states in **Paylaşım kuyruğu** (Post queue).
 
-## Use a video folder
+## Use an image/video folder
 
-Open **Medya kütüphanesi** (Media library), click **Klasör seç**, browse to your video folder, and click **Bu klasörü seç**. The folder path fills in automatically. Click **Klasörü tara** to import its videos. You can also enter a path manually, for example on a Mac:
+Open **Medya kütüphanesi** (Media library), click **Klasör seç**, browse to your media folder, and click **Bu klasörü seç**. The folder path fills in automatically. Click **Klasörü tara** to import its media. You can also enter a path manually, for example on a Mac:
 
 ```text
 /Users/YourName/Movies/SocialStudio
 ```
 
-Use a folder on the computer running Social Studio. On Windows, use your Windows folder path. The app imports MP4 files up to **100 MB each** from that folder; it does not scan subfolders or convert videos.
+Use a folder on the computer running Social Studio. On Windows, use your Windows folder path. The app imports MP4 videos up to **100 MB** and JPEG/PNG/WebP images up to **5 MB** from that folder. It does not scan subfolders or convert files. Each platform shows compatible formats: Instagram image posts require JPEG; TikTok photos require JPEG/WebP; YouTube covers require JPEG/PNG.
 
-Give videos useful names, such as `voice-notes-demo.mp4`. **AI chooses using filenames and your notes. It does not watch or transcribe the video.**
+Give files useful names, such as `voice-notes-demo.mp4`. **AI chooses using filenames and your notes. It does not view images, watch videos, or transcribe audio.**
 
 The file flow is:
 
 1. Scanning creates a private copy for previews and publishing. The original stays in its folder.
-2. You or AI choose a video for your posts.
-3. Once **all posts using that imported video** have published successfully, the original moves into the folder's `paylasildi/` subfolder. A unique prefix prevents overwriting another file.
+2. You or AI choose media for your posts.
+3. Once **all posts using that imported media, including YouTube covers** have published successfully, the original moves into the folder's `paylasildi/` subfolder. A unique prefix prevents overwriting another file.
 
 If a post is still a draft, failed, or uncertain, the original stays in place. An archive error does not undo a successful publication; the library shows the error and lets you retry the move. Files uploaded directly through the browser have no source folder to move from.
 
 ## Let it publish regularly
 
-For recurring **X and YouTube** posts:
+For recurring **X, YouTube, and Instagram Reels** posts:
 
 1. Add videos to the library or connect a video folder.
 2. Open **Otomatik akış** (Automatic flow).
@@ -114,11 +115,12 @@ For recurring **X and YouTube** posts:
 
 The first run happens **after the selected interval**, not immediately. Each run selects an unused video, writes text for each account, publishes, and archives the source when every target succeeds. The app rescans the saved folder on each run.
 
-Keep your computer and app running. Use **Otomatik akışı durdur** to stop future runs. TikTok stays outside this recurring flow because each post needs its own settings and consent.
+Keep your computer and app running. Use **Otomatik akışı durdur** to stop future runs. Instagram publishes the chosen video as a Reel and also shares it to the profile feed. TikTok stays outside this recurring flow because each post needs its own settings and consent.
 
 ## Costs, privacy, and platform limits
 
 - **AI and platform API usage may cost money.** Text generation, image generation, and AI video selection use your OpenAI account. Recurring flows can keep generating charges while enabled. Review provider billing and limits; the app does not enforce a spending cap.
+- **Instagram and TikTok photos need public HTTPS media delivery.** The app creates a signed URL for only the selected asset, valid for one hour. Set up your own HTTPS address as described in the [API setup guide](docs/platform-setup-tr.md). Instagram requires a professional Business/Creator account; TikTok also requires domain or URL-prefix verification for photos.
 - **A connection does not guarantee publication.** Your provider account must have the required API permissions. YouTube may restrict uploads from unverified API projects to private visibility. TikTok requires posting approval and may not approve a private tool for managing your own accounts. See [provider setup and restrictions](docs/advanced-usage.md#developer-api-setup-and-provider-limits).
 - **Local storage does not mean everything stays offline.** Drafts and settings are stored on your computer. AI requests send the relevant notes, project information, and filenames to OpenAI. Publishing sends the selected text and media to the chosen platform.
 - **Keep a backup.** Stop the app and back up both `.env` and `data/` in the project folder. The packaged Mac app stores its separate profile in `~/Library/Application Support/Social Studio/`. See [backup and upgrade details](docs/advanced-usage.md#upgrading-an-existing-installation).
@@ -138,6 +140,7 @@ Keep your computer and app running. Use **Otomatik akışı durdur** to stop fut
 
 - [Türkçe başlangıç rehberi](docs/quick-start-tr.md)
 - [Advanced setup, Mac app builds, phone access, and previous workflows](docs/advanced-usage.md)
+- [YouTube, Instagram, TikTok, and X API setup](docs/platform-setup-tr.md)
 - [X account setup in Turkish](docs/x-setup.md)
 - [Contributing and local tests](CONTRIBUTING.md)
 - [Security and private vulnerability reports](SECURITY.md)

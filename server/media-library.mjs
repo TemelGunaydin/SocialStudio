@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { copyFile, readdir, lstat, realpath, mkdir, link, unlink, open } from 'node:fs/promises';
-import { join, resolve, basename, isAbsolute, dirname } from 'node:path';
+import { join, resolve, basename, isAbsolute, dirname, extname } from 'node:path';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { validateVideo, maxVideoBytes } from './video.mjs';
 import { bad } from './social-ai.mjs';
+import { validateImage, maxImageBytes } from './image.mjs';
 
 export async function listFolders(input = '') {
   if (typeof input !== 'string' || (input.trim() && !isAbsolute(input.trim()))) throw bad('Geçerli bir klasör yolu seçin.');
@@ -18,10 +19,10 @@ export async function listFolders(input = '') {
       .sort((a, b) => a.name.localeCompare(b.name, 'tr')).map(entry => ({ name: entry.name, path: join(folder, entry.name) })) };
 }
 
-export function insertMedia(store, { name, source = null, stored, kind, size }) {
+export function insertMedia(store, { name, source = null, stored, kind, size, aiGenerated = false }) {
   const id = randomUUID();
-  store.db.prepare('INSERT INTO media_library (id,name,source_path,stored_name,kind,size,created_at) VALUES (?,?,?,?,?,?,?)')
-    .run(id, name.slice(0, 240), source, stored, kind, size, new Date().toISOString());
+  store.db.prepare('INSERT INTO media_library (id,name,source_path,stored_name,kind,size,ai_generated,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run(id, name.slice(0, 240), source, stored, kind, size, Number(aiGenerated), new Date().toISOString());
   return store.db.prepare('SELECT * FROM media_library WHERE id = ?').get(id);
 }
 export async function scanFolder(store, dataDir, input) {
@@ -32,18 +33,21 @@ export async function scanFolder(store, dataDir, input) {
   const skipped = [];
   let imported = 0;
   await mkdir(join(dataDir, 'videos'), { recursive: true, mode: 0o700 });
-  // Only top-level regular MP4s. Archived folders and symlinks are never scanned.
-  for (const entry of entries.filter(item => item.isFile() && /\.mp4$/i.test(item.name)).slice(0, 500)) {
+  await mkdir(join(dataDir, 'images'), { recursive: true, mode: 0o700 });
+  // Only top-level regular media. Archived folders and symlinks are never scanned.
+  for (const entry of entries.filter(item => item.isFile() && /\.(mp4|jpe?g|png|webp)$/i.test(item.name)).slice(0, 500)) {
     const source = join(folder, entry.name);
     if (store.db.prepare('SELECT 1 FROM media_library WHERE source_path = ?').get(source)) continue;
-    const stored = `${randomUUID()}.mp4`;
-    const target = join(dataDir, 'videos', stored);
+    const extension = extname(entry.name).toLowerCase();
+    const kind = extension === '.mp4' ? 'video' : 'image';
+    const stored = `${randomUUID()}${extension === '.jpeg' ? '.jpg' : extension}`;
+    const target = join(dataDir, kind === 'video' ? 'videos' : 'images', stored);
     try {
       const info = await lstat(source);
-      if (!info.isFile() || info.isSymbolicLink() || !info.size || info.size > maxVideoBytes) throw bad('Video 100 MB altında, normal bir MP4 dosyası olmalı.');
+      if (!info.isFile() || info.isSymbolicLink() || !info.size || info.size > (kind === 'video' ? maxVideoBytes : maxImageBytes)) throw bad('Video 100 MB, görsel 5 MB altında normal bir dosya olmalı.');
       await copyFile(source, target, constants.COPYFILE_EXCL);
-      const size = await validateVideo(target);
-      insertMedia(store, { name: entry.name, source, stored, kind: 'video', size });
+      const size = kind === 'video' ? await validateVideo(target) : await validateImage(target);
+      insertMedia(store, { name: entry.name, source, stored, kind, size });
       imported++;
     } catch (error) {
       await unlink(target).catch(() => {});
@@ -71,7 +75,7 @@ async function identical(a, b) {
 export async function archiveMedia(store, dataDir, mediaId) {
   const media = store.db.prepare('SELECT * FROM media_library WHERE id = ?').get(mediaId);
   if (!media || media.status === 'published') return;
-  const posts = store.db.prepare('SELECT status FROM social_posts WHERE media_id = ?').all(mediaId);
+  const posts = store.db.prepare("SELECT status FROM social_posts WHERE media_id = ? OR json_extract(options,'$.thumbnailId') = ?").all(mediaId, mediaId);
   // A shared asset moves only after every attached post succeeded.
   if (!posts.length || posts.some(post => post.status !== 'published')) return;
   try {
@@ -79,8 +83,8 @@ export async function archiveMedia(store, dataDir, mediaId) {
     if (media.source_path) {
       const source = resolve(media.source_path);
       const sourceInfo = await lstat(source).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-      const preview = join(dataDir, 'videos', media.stored_name);
-      if (sourceInfo && (!sourceInfo.isFile() || sourceInfo.isSymbolicLink() || !(await identical(source, preview)))) throw bad('Kaynak video değişmiş; orijinal taşınmadı.');
+      const preview = join(dataDir, media.kind === 'video' ? 'videos' : 'images', media.stored_name);
+      if (sourceInfo && (!sourceInfo.isFile() || sourceInfo.isSymbolicLink() || !(await identical(source, preview)))) throw bad('Kaynak medya değişmiş; orijinal taşınmadı.');
       const archive = join(dirname(source), 'paylasildi');
       await mkdir(archive, { recursive: true });
       if ((await lstat(archive)).isSymbolicLink()) throw bad('Arşiv klasörü sembolik bağlantı olamaz.');

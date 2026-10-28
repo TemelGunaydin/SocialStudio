@@ -290,7 +290,7 @@ test('failed scheduled posts remain failed, and a new file may reuse an archived
 
 test('selected image model generates a private asset without replacing YouTube video',async()=>{
   const old=process.env.OPENAI_API_KEY;process.env.OPENAI_API_KEY='test-key';const requests=[];
-  const f=fixture({fetchImpl:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return response({data:[{b64_json:Buffer.from([255,216,255,217]).toString('base64')}]});}});
+  const f=fixture({fetchImpl:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return response({data:[{b64_json:readFileSync(new URL('./fixtures/social.jpg',import.meta.url)).toString('base64')}]});}});
   try{
     const [x,yt]=await f.create([{platform:'x'},{platform:'youtube'}]);
     const generated=await f.request(`/api/social/posts/${x.id}/image`,{model:'gpt-image-1-mini'});assert.equal(generated.attached,true);assert.ok(existsSync(join(f.dir,'data','images',generated.media.stored_name)));
@@ -308,4 +308,194 @@ test('archive recovers an interrupted file move and restart preserves uncertain 
     f.store.db.prepare("UPDATE social_posts SET status='publishing' WHERE id=?").run(post.id);
     const reopened=openStore(join(f.dir,'data'));assert.equal(reopened.db.prepare('SELECT status FROM social_posts').get().status,'uncertain');reopened.db.close();assert.ok(existsSync(destination));
   }finally{f.close();}
+});
+
+function publicMediaEnv() {
+  const old={...process.env};Object.assign(process.env,{PUBLIC_BASE_URL:'https://studio.example.com',SESSION_SECRET:'test-media-secret-at-least-32-characters'});
+  return ()=>{for(const key of Object.keys(process.env))if(!(key in old))delete process.env[key];Object.assign(process.env,old);};
+}
+const jpeg=()=>readFileSync(new URL('./fixtures/social.jpg',import.meta.url));
+
+test('mixed media folders import images privately and shared images archive after all posts',async()=>{
+  const f=fixture();try{
+    const folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'photo.jpeg'),jpeg());writeFileSync(join(folder,'clip.mp4'),mp4());writeFileSync(join(folder,'broken.jpg'),'not an image');
+    symlinkSync(join(folder,'photo.jpeg'),join(folder,'linked.jpg'));
+    const scan=await scanFolder(f.store,join(f.dir,'data'),folder);assert.equal(scan.imported,2);assert.equal(scan.skipped.length,1);
+    assert.equal((await scanFolder(f.store,join(f.dir,'data'),folder)).imported,0);
+    const image=f.store.db.prepare("SELECT * FROM media_library WHERE kind='image'").get();assert.equal(image.ai_generated,0);assert.match(image.stored_name,/\.jpg$/);
+    const a=f.addAccount('x','first'),b=f.addAccount('x','second');
+    const posts=await f.create([{platform:'x',accountId:a.id},{platform:'x',accountId:b.id}]);
+    for(const post of posts)await f.save(post,{mediaId:image.id});
+    await f.request(`/api/social/posts/${posts[0].id}/publish`);assert.ok(existsSync(join(folder,'photo.jpeg')));
+    await f.request(`/api/social/posts/${posts[1].id}/publish`);assert.equal(existsSync(join(folder,'photo.jpeg')),false);assert.ok(existsSync(join(f.dir,'data','images',image.stored_name)));
+    assert.ok(readdirSync(join(folder,'paylasildi')).some(name=>name.endsWith('photo.jpeg')));
+  }finally{f.close();}
+});
+
+test('YouTube OAuth adds two channels, reconnects one in place, and rejects missing permissions',async()=>{
+  const old={...process.env};Object.assign(process.env,{YOUTUBE_CLIENT_ID:'test-client',YOUTUBE_CLIENT_SECRET:'test-secret',PUBLIC_BASE_URL:'http://localhost:3000'});
+  const f=fixture();try{
+    async function connect(id,scope='https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly') {
+      const auth=new URL(oauthStart(f.store,'youtube'));assert.equal(auth.searchParams.get('access_type'),'offline');assert.equal(auth.searchParams.get('prompt'),'consent select_account');
+      await oauthFinish(f.store,'youtube',auth.searchParams.get('state'),'code',async url=>url.includes('/token')?response({access_token:`token-${id}`,refresh_token:`refresh-${id}`,expires_in:3600,scope}):response({items:[{id,snippet:{title:id,customUrl:`@${id}`}}]}));
+    }
+    await connect('channel-one');await connect('channel-two');
+    const first=f.store.db.prepare("SELECT id FROM social_accounts WHERE remote_id='channel-one'").get().id;
+    await connect('channel-one');assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM social_accounts').get().n,2);
+    assert.equal(f.store.db.prepare("SELECT id FROM social_accounts WHERE remote_id='channel-one'").get().id,first);
+    await assert.rejects(()=>connect('denied','https://www.googleapis.com/auth/youtube.readonly'),/Yayın izni/);
+    assert.equal(f.store.db.prepare('SELECT COUNT(*) AS n FROM social_accounts').get().n,2);
+  }finally{f.close();for(const key of Object.keys(process.env))if(!(key in old))delete process.env[key];Object.assign(process.env,old);}
+});
+
+test('Instagram OAuth uses Instagram Login, exchanges long-lived tokens, and isolates accounts and refreshes',async()=>{
+  const restore=publicMediaEnv();Object.assign(process.env,{INSTAGRAM_CLIENT_ID:'ig-client',INSTAGRAM_CLIENT_SECRET:'ig-secret'});
+  const f=fixture();try{
+    for(const id of ['one','two']){
+      const auth=new URL(oauthStart(f.store,'instagram'));assert.equal(auth.hostname,'www.instagram.com');assert.equal(auth.searchParams.get('force_authentication'),'1');assert.match(auth.searchParams.get('scope'),/instagram_business_content_publish/);
+      await oauthFinish(f.store,'instagram',auth.searchParams.get('state'),'code',async url=>url.includes('api.instagram.com')?response({access_token:'short',user_id:id}):url.includes('/access_token?')?response({access_token:`long-${id}`,expires_in:5184000}):response({user_id:id,username:`creator-${id}`}));
+    }
+    const accounts=f.store.db.prepare("SELECT * FROM social_accounts WHERE platform='instagram' ORDER BY remote_id").all();assert.equal(accounts.length,2);
+    assert.equal(await accountToken(f.store,accounts[0],()=>{throw new Error('Must not refresh early');}),'long-one');
+    f.store.db.prepare('UPDATE social_accounts SET token=? WHERE id=?').run(JSON.stringify({access_token:'long-one',expires_at:Date.now()+2*86400000}),accounts[0].id);
+    let refreshes=0;const refresh=async url=>{refreshes++;assert.match(url,/ig_refresh_token/);return response({access_token:'renewed-one',expires_in:5184000});};
+    assert.deepEqual(await Promise.all([accountToken(f.store,accounts[0],refresh),accountToken(f.store,accounts[0],refresh)]),['renewed-one','renewed-one']);assert.equal(refreshes,1);
+    assert.equal(JSON.parse(f.store.db.prepare('SELECT token FROM social_accounts WHERE id=?').get(accounts[1].id).token).access_token,'long-two');
+    f.store.db.prepare('UPDATE social_accounts SET token=? WHERE id=?').run(JSON.stringify({access_token:'expired',expires_at:0}),accounts[0].id);
+    await assert.rejects(()=>accountToken(f.store,accounts[0],refresh),/sona erdi/);assert.equal(refreshes,1);
+    const state=await f.request('/api/social/state',null,'GET');assert.equal(JSON.stringify(state).includes('long-two'),false);
+  }finally{f.close();restore();}
+});
+
+test('temporary media URLs are scoped to one asset, expire, and never expose account tokens',async()=>{
+  const restore=publicMediaEnv();try{
+    const {deliveryUrl,verifyDelivery,deliveryReady}=await import('../server/media-delivery.mjs');
+    const id=randomUUID(),url=new URL(deliveryUrl({id}));assert.ok(verifyDelivery(id,url));assert.equal(verifyDelivery(randomUUID(),url),false);
+    const changed=new URL(url);changed.searchParams.set('expires',String(Math.floor(Date.now()/1000)-1));assert.equal(verifyDelivery(id,changed),false);
+    changed.searchParams.set('signature','a'.repeat(64));assert.equal(verifyDelivery(id,changed),false);
+    assert.equal(verifyDelivery(id,new URL('https://studio.example.com')),false);
+    for(const base of ['http://localhost:3000','https://127.0.0.1','https://192.168.1.2','https://172.16.0.1','https://mac.tail.ts.net']){process.env.PUBLIC_BASE_URL=base;assert.equal(deliveryReady(),false);assert.throws(()=>deliveryUrl({id}),/HTTPS/);}
+  }finally{restore();}
+});
+
+test('Instagram images and Reels publish only after processing and use reviewed captions and account tokens',async()=>{
+  const restore=publicMediaEnv();const f=fixture();try{
+    const a=f.addAccount('instagram','creator');f.store.db.prepare('UPDATE social_accounts SET token=? WHERE id=?').run(JSON.stringify({access_token:'ig-own-token',expires_at:Date.now()+5184000000}),a.id);
+    const folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());writeFileSync(join(folder,'reel.mp4'),mp4());await scanFolder(f.store,join(f.dir,'data'),folder);
+    const assets=f.store.db.prepare('SELECT * FROM media_library').all();
+    for(const kind of ['post','reel']){
+      const media=assets.find(item=>item.kind===(kind==='post'?'image':'video'));let calls=0,waits=0,published=0;
+      const result=await publishSocial(f.store,{platform:'instagram',account_id:a.id,title:'',text:'Exact reviewed caption',options:JSON.stringify({kind,shareToFeed:true})},media,join(f.dir,'data'),async(url,options)=>{
+        assert.equal(options.headers.Authorization,'Bearer ig-own-token');calls++;
+        if(url.endsWith('/media')){assert.equal(options.body.get('caption'),'Exact reviewed caption');const signed=new URL(options.body.get(kind==='post'?'image_url':'video_url'));assert.match(signed.pathname,new RegExp(media.id));assert.ok(signed.searchParams.get('signature'));if(kind==='reel')assert.equal(options.body.get('media_type'),'REELS');return response({id:'container'});}
+        if(url.includes('fields=status'))return response({status_code:calls===2?'IN_PROGRESS':'FINISHED'});
+        if(url.endsWith('/media_publish')){published++;assert.equal(options.body.get('creation_id'),'container');return response({id:'remote-post'});}
+        return response({permalink:'https://www.instagram.com/p/reviewed/'});
+      },async ms=>{waits++;assert.equal(ms,60000);});
+      assert.equal(result.id,'remote-post');assert.equal(result.url,'https://www.instagram.com/p/reviewed/');assert.equal(published,1);assert.equal(waits,1);
+    }
+  }finally{f.close();restore();}
+});
+
+test('Instagram rejects incompatible media and does not blindly retry ambiguous publish responses',async()=>{
+  const restore=publicMediaEnv();const f=fixture();try{
+    const account=f.addAccount('instagram','one');f.store.db.prepare('UPDATE social_accounts SET token=? WHERE id=?').run(JSON.stringify({access_token:'ig',expires_at:Date.now()+5184000000}),account.id);
+    const folder=join(f.dir,'images');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());await scanFolder(f.store,join(f.dir,'data'),folder);
+    const media=f.store.db.prepare('SELECT * FROM media_library').get();let published=0;
+    const fetchImpl=async url=>{if(url.endsWith('/media'))return response({id:'container'});if(url.includes('fields=status'))return response({status_code:'FINISHED'});published++;throw new Error('connection lost after publish');};
+    const post={platform:'instagram',account_id:account.id,text:'Caption',options:'{"kind":"post"}'};
+    await assert.rejects(()=>publishSocial(f.store,{...post,options:'{"kind":"reel"}'},media,join(f.dir,'data'),fetchImpl),/MP4/);assert.equal(published,0);
+    await assert.rejects(()=>publishSocial(f.store,post,media,join(f.dir,'data'),fetchImpl,async()=>{}),error=>error.uncertain===true);assert.equal(published,1);
+    let publishCalls=0;await assert.rejects(()=>publishSocial(f.store,post,media,join(f.dir,'data'),async url=>{if(url.endsWith('/media'))return response({id:'container'});if(url.includes('fields=status'))return response({status_code:'ERROR',status:'Unsupported ratio'});publishCalls++;return response({});},async()=>{}),/Unsupported ratio/);assert.equal(publishCalls,0);
+  }finally{f.close();restore();}
+});
+
+test('TikTok photos use Direct Post with verified-domain delivery URL and creator consent',async()=>{
+  const restore=publicMediaEnv();const f=fixture();try{
+    const account=f.addAccount('tiktok','creator'),folder=join(f.dir,'images');mkdirSync(folder);writeFileSync(join(folder,'photo.jpg'),jpeg());await scanFolder(f.store,join(f.dir,'data'),folder);
+    const media=f.store.db.prepare('SELECT * FROM media_library').get();let inits=0;
+    const fetchImpl=async(url,options)=>{
+      if(url.includes('creator_info'))return response({data:{creator_username:'creator',privacy_level_options:['SELF_ONLY'],comment_disabled:true},error:{code:'ok'}});
+      if(url.includes('/content/init/')){inits++;const body=JSON.parse(options.body);assert.equal(body.media_type,'PHOTO');assert.equal(body.post_mode,'DIRECT_POST');assert.equal(body.post_info.description,'Reviewed photo caption');assert.equal(body.post_info.auto_add_music,true);assert.equal(body.post_info.disable_comment,true);assert.equal(body.source_info.photo_cover_index,0);assert.match(body.source_info.photo_images[0],/https:\/\/studio.example.com\/api\/social\/delivery\//);return response({data:{publish_id:'photo-job'},error:{code:'ok'}});}
+      return response({data:{status:'PUBLISH_COMPLETE',publicaly_available_post_id:['photo123']},error:{code:'ok'}});
+    };
+    const post={platform:'tiktok',account_id:account.id,title:'Photo title',text:'Reviewed photo caption',options:JSON.stringify({privacy:'SELF_ONLY',consent:true,autoMusic:true})};
+    const result=await publishSocial(f.store,post,media,join(f.dir,'data'),fetchImpl,async()=>{});assert.equal(result.url,'https://www.tiktok.com/@creator/photo/photo123');assert.equal(inits,1);
+    await assert.rejects(()=>publishSocial(f.store,{...post,title:'x'.repeat(91)},media,join(f.dir,'data'),fetchImpl),/90 karakter/);assert.equal(inits,1);
+    await assert.rejects(()=>publishSocial(f.store,{...post,options:'{"privacy":"SELF_ONLY","consent":false}'},media,join(f.dir,'data'),fetchImpl),/kabul edin/);assert.equal(inits,1);
+  }finally{f.close();restore();}
+});
+
+test('YouTube custom thumbnail follows video publication and failures do not trigger another video upload',async()=>{
+  const f=fixture();try{
+    const account=f.addAccount('youtube','channel'),folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());writeFileSync(join(folder,'clip.mp4'),mp4());await scanFolder(f.store,join(f.dir,'data'),folder);
+    const image=f.store.db.prepare("SELECT * FROM media_library WHERE kind='image'").get(),video=f.store.db.prepare("SELECT * FROM media_library WHERE kind='video'").get();
+    let starts=0,thumbnails=0;
+    const fetchImpl=async(url,options)=>{if(url.includes('thumbnails/set')){thumbnails++;assert.match(url,/videoId=video-one/);assert.equal(options.headers['Content-Type'],'image/jpeg');assert.equal(options.body.size,jpeg().length);return response({items:[{}]});}if(options.method==='POST'){starts++;return new Response('',{headers:{location:'https://www.googleapis.com/upload/session'}});}return response({id:'video-one'});};
+    const post={platform:'youtube',account_id:account.id,title:'Reviewed title',text:'Reviewed description',options:JSON.stringify({privacy:'private',thumbnailId:image.id})};
+    assert.equal((await publishSocial(f.store,post,video,join(f.dir,'data'),fetchImpl)).id,'video-one');assert.equal(starts,1);assert.equal(thumbnails,1);
+    const warning=await publishSocial(f.store,post,video,join(f.dir,'data'),(url,options)=>url.includes('thumbnails/set')?Promise.reject(new Error('thumbnail denied')):fetchImpl(url,options));
+    assert.equal(warning.id,'video-one');assert.match(warning.warning,/Video yayınlandı/);assert.equal(starts,2);
+  }finally{f.close();}
+});
+
+test('Instagram drafts enforce media kind, HTTPS delivery, English text generation, and per-account state',async()=>{
+  const restore=publicMediaEnv();process.env.OPENAI_API_KEY='test-key';
+  const f=fixture({fetchImpl:async(_url,options)=>{const body=JSON.parse(options.body);assert.match(body.instructions,/English/);return aiResponse({title:'Your next idea',text:'Keep your next idea close.\n\nTry Notes today.'});}});
+  try{
+    const account=f.addAccount('instagram','creator'),folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());writeFileSync(join(folder,'clip.mp4'),mp4());await scanFolder(f.store,join(f.dir,'data'),folder);
+    const image=f.store.db.prepare("SELECT * FROM media_library WHERE kind='image'").get(),video=f.store.db.prepare("SELECT * FROM media_library WHERE kind='video'").get();
+    let [post]=await f.create([{platform:'instagram',accountId:account.id}]);
+    await assert.rejects(()=>f.save(post,{mediaId:video.id,options:{kind:'post'}}),/uygun değil/);
+    post=await f.save(post,{mediaId:image.id,options:{kind:'post'}});
+    const generated=await f.request(`/api/social/posts/${post.id}/generate`);assert.match(generated.post.text,/Keep your next idea/);
+    process.env.PUBLIC_BASE_URL='http://localhost:3000';await assert.rejects(()=>f.request(`/api/social/posts/${post.id}/publish`),/HTTPS/);assert.equal(f.calls,0);
+    process.env.PUBLIC_BASE_URL='https://studio.example.com';await f.request(`/api/social/posts/${post.id}/publish`);assert.equal(f.calls,1);
+  }finally{f.close();restore();}
+});
+
+test('AI media selection respects Instagram post/Reels formats and resets TikTok consent on a new attachment',async()=>{
+  const restore=publicMediaEnv();process.env.OPENAI_API_KEY='test-key';let candidates=[];
+  const f=fixture({fetchImpl:async(_url,options)=>{candidates=JSON.parse(JSON.parse(options.body).input).candidates;return aiResponse({id:candidates[0].id,reason:'Relevant filename.'});}});
+  try{
+    const folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());writeFileSync(join(folder,'clip.mp4'),mp4());await scanFolder(f.store,join(f.dir,'data'),folder);
+    let [post]=await f.create([{platform:'instagram'}]);
+    let result=await f.request(`/api/social/posts/${post.id}/select-media`);assert.ok(candidates.every(item=>item.kind==='image'));assert.equal(result.post.media_id,candidates[0].id);
+    post=await f.save(result.post,{mediaId:null,options:{kind:'reel'}});result=await f.request(`/api/social/posts/${post.id}/select-media`);assert.ok(candidates.every(item=>item.kind==='video'));
+    const video=f.store.db.prepare("SELECT * FROM media_library WHERE kind='video'").get();
+    let [tiktok]=await f.create([{platform:'tiktok'}]);tiktok=await f.save(tiktok,{mediaId:video.id,options:{privacy:'SELF_ONLY',consent:true,duration:60}});
+    assert.equal(JSON.parse(tiktok.options).consent,false);assert.equal(JSON.parse(tiktok.options).duration,undefined);
+    tiktok=await f.save(tiktok,{mediaId:video.id,options:{privacy:'SELF_ONLY',consent:true,duration:1}});assert.equal(JSON.parse(tiktok.options).consent,true);
+    const image=f.store.db.prepare("SELECT * FROM media_library WHERE kind='image'").get();
+    tiktok=await f.save(tiktok,{mediaId:image.id,options:JSON.parse(tiktok.options)});assert.equal(JSON.parse(tiktok.options).consent,false);assert.equal(JSON.parse(tiktok.options).duration,undefined);
+  }finally{f.close();restore();}
+});
+
+test('recurring Instagram flow explicitly creates Reels and shared thumbnails wait for all attached posts',async()=>{
+  const restore=publicMediaEnv();process.env.OPENAI_API_KEY='test-key';let observed;
+  const f=fixture({publisher:async(_store,post)=>{observed=JSON.parse(post.options);return{id:'published-reel',url:'https://www.instagram.com/reel/one/'};},fetchImpl:async(_url,options)=>{const data=JSON.parse(JSON.parse(options.body).input);return data.candidates?aiResponse({id:data.candidates[0].id,reason:'Relevant video.'}):aiResponse({title:'Notes',text:'Keep your ideas close.'});}});
+  try{
+    const folder=join(f.dir,'mixed');mkdirSync(folder);writeFileSync(join(folder,'image.jpg'),jpeg());writeFileSync(join(folder,'clip.mp4'),mp4());await scanFolder(f.store,join(f.dir,'data'),folder);
+    const account=f.addAccount('instagram','creator');const rule={enabled:true,context:'Notes',model:'gpt-6-luna',targets:[{platform:'instagram',accountId:account.id}],intervalHours:24,privacy:'private'};
+    await f.request('/api/social/automation',rule);let saved=JSON.parse(f.store.getSetting.get('social_automation').value);f.store.setSetting.run('social_automation',JSON.stringify({...saved,nextAt:'2020-01-01T00:00:00.000Z'}));
+    await f.studio.scheduler();assert.deepEqual(observed,{kind:'reel',shareToFeed:true});assert.equal(f.store.db.prepare('SELECT status FROM social_posts').get().status,'published');
+    const image=f.store.db.prepare("SELECT * FROM media_library WHERE kind='image'").get(),youtube=f.addAccount('youtube','channel'),x=f.addAccount('x','another');
+    let [yt,post]=await f.create([{platform:'youtube',accountId:youtube.id},{platform:'x',accountId:x.id}]);
+    yt=await f.save(yt,{options:{privacy:'private',thumbnailId:image.id}});post=await f.save(post,{mediaId:image.id});
+    f.store.db.prepare("UPDATE social_posts SET status='published' WHERE id=?").run(yt.id);await archiveMedia(f.store,join(f.dir,'data'),image.id);assert.ok(existsSync(join(folder,'image.jpg')));
+    f.store.db.prepare("UPDATE social_posts SET status='published' WHERE id=?").run(post.id);await archiveMedia(f.store,join(f.dir,'data'),image.id);assert.equal(existsSync(join(folder,'image.jpg')),false);
+  }finally{f.close();restore();}
+});
+
+test('existing media libraries upgrade without losing files or treating new uploads as AI generated',async()=>{
+  const {DatabaseSync}=await import('node:sqlite');const dir=mkdtempSync(join(tmpdir(),'studio-media-upgrade-'));
+  let store;
+  try{
+    const legacy=new DatabaseSync(join(dir,'studio.sqlite'));
+    legacy.exec("CREATE TABLE media_library (id TEXT PRIMARY KEY,name TEXT NOT NULL,source_path TEXT UNIQUE,stored_name TEXT NOT NULL,kind TEXT NOT NULL,size INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'available',created_at TEXT NOT NULL,error TEXT)");
+    const id=randomUUID();legacy.prepare('INSERT INTO media_library (id,name,stored_name,kind,size,created_at) VALUES (?,?,?,?,?,?)').run(id,'Old AI image',`${randomUUID()}.jpg`,'image',300,'2026-01-01');legacy.close();
+    store=openStore(dir);assert.equal(store.db.prepare('SELECT ai_generated FROM media_library WHERE id=?').get(id).ai_generated,1);
+    const uploaded=randomUUID();store.db.prepare('INSERT INTO media_library (id,name,stored_name,kind,size,created_at) VALUES (?,?,?,?,?,?)').run(uploaded,'New upload',`${randomUUID()}.jpg`,'image',300,'2026-01-02');store.db.close();store=openStore(dir);
+    assert.equal(store.db.prepare('SELECT ai_generated FROM media_library WHERE id=?').get(uploaded).ai_generated,0);assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM media_library').get().n,2);
+  }finally{store?.db.close();rmSync(dir,{recursive:true,force:true});}
 });

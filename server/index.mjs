@@ -16,6 +16,7 @@ import { saveVideo, serveVideo } from './video.mjs';
 import { unlink } from 'node:fs/promises';
 import { createSocialStudio } from './social.mjs';
 import { upsertAccount } from './social-platforms.mjs';
+import { verifyDelivery } from './media-delivery.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const home = resolve(process.env.STUDIO_HOME || root);
@@ -187,6 +188,15 @@ async function handle(req, res) {
   if (req.headers.host !== publicUrl.host) return fail(res, 403, 'Paneli yapılandırılmış adresinden açın.');
   const url = new URL(req.url, publicUrl);
   const path = url.pathname;
+  const delivery = path.match(/^\/api\/social\/delivery\/([a-f0-9-]{36})$/);
+  if (delivery && ['GET','HEAD'].includes(req.method)) {
+    if (!verifyDelivery(delivery[1], url)) return fail(res, 403, 'Medya bağlantısı geçersiz veya süresi doldu.');
+    const media = store.db.prepare('SELECT * FROM media_library WHERE id=?').get(delivery[1]);
+    if (!media || !/^[a-f0-9-]{36}\.(mp4|jpg|png|webp)$/.test(media.stored_name)) return fail(res, 404, 'Medya bulunamadı.');
+    if (media.kind === 'video') return serveVideo(req, res, dataDir, media.stored_name);
+    const type = { '.jpg':'image/jpeg', '.png':'image/png', '.webp':'image/webp' }[extname(media.stored_name)];
+    return serveFile(res, join(dataDir, 'images', media.stored_name), type);
+  }
   if (req.method === 'GET' && path === '/') return serveFile(res, join(publicDir, 'index.html'), 'text/html; charset=utf-8');
   if (req.method === 'GET' && path === '/app.js') return serveFile(res, join(publicDir, 'app.js'), 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && ['/studio.js', '/studio.css'].includes(path)) return serveFile(res, join(publicDir, path.slice(1)), path.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8');

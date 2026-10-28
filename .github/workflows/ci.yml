@@ -41,6 +41,7 @@ jobs:
         run: |
           node --check public/app.js
           node --check public/onboarding.js
+          node --check public/studio.js
 
   mac-package:
     name: Verify local Mac package (not a release)

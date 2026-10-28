@@ -5,9 +5,11 @@ import { configurationChanges, saveConfig } from './config.mjs';
 import { projectFromRow } from './projects.mjs';
 import { openaiRequest } from './openai.mjs';
 import { saveVideo } from './video.mjs';
+import { saveImage, validateImageBytes } from './image.mjs';
+import { deliveryReady } from './media-delivery.mjs';
 import { insertMedia, scanFolder, archiveMedia, listFolders } from './media-library.mjs';
-import { textModels, imageModels, modelId, bad, socialCopy, selectVideo, validateCopy } from './social-ai.mjs';
-import { platforms, platformConfig, importXAccount, oauthStart, oauthFinish, creatorInfo, publishSocial } from './social-platforms.mjs';
+import { textModels, imageModels, modelId, bad, socialCopy, selectVideo, selectMedia, validateCopy } from './social-ai.mjs';
+import { platforms, platformConfig, importXAccount, oauthStart, oauthFinish, creatorInfo, publishSocial, mediaFits } from './social-platforms.mjs';
 
 export function createSocialStudio({ store, dataDir, configPath, readJson, reply, fetchImpl = fetch, publisher = publishSocial, isConfigBusy = () => false }) {
   const db = store.db;
@@ -26,6 +28,12 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
     return db.prepare(`SELECT m.* FROM media_library m WHERE m.kind='video' AND m.status='available'
       AND NOT EXISTS (SELECT 1 FROM social_posts p WHERE p.media_id=m.id AND p.status IN ('scheduled','publishing','published','uncertain')) ORDER BY m.created_at DESC LIMIT 100`).all();
   }
+  function availableMedia(post) {
+    return db.prepare(`SELECT m.* FROM media_library m WHERE m.status='available'
+      AND NOT EXISTS (SELECT 1 FROM social_posts p WHERE (p.media_id=m.id OR json_extract(p.options,'$.thumbnailId')=m.id)
+      AND p.status IN ('scheduled','publishing','published','uncertain')) ORDER BY m.created_at DESC LIMIT 1000`).all()
+      .filter(item => mediaFits(post.platform, item, JSON.parse(post.options))).slice(0, 100);
+  }
   function validateTarget(platform, id) {
     if (id && account(id)?.platform !== platform) throw bad('Seçilen hesap platformla eşleşmiyor.');
     return id || null;
@@ -34,7 +42,22 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw bad('Yayın seçenekleri geçersiz.');
     if (platform === 'youtube' && !['private', 'unlisted', 'public'].includes(value.privacy)) throw bad('YouTube görünürlüğünü seçin.');
     if (platform === 'tiktok' && value.privacy && !['SELF_ONLY', 'PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR'].includes(value.privacy)) throw bad('TikTok görünürlüğü geçersiz.');
-    return JSON.stringify(Object.fromEntries(['privacy','consent','duration','madeForKids','aiGenerated','ownBrand','branded','allowComment','allowDuet','allowStitch'].filter(key => value[key] !== undefined).map(key => [key, value[key]])));
+    if (platform === 'instagram' && value.kind && !['post','reel'].includes(value.kind)) throw bad('Instagram paylaşım türünü seçin.');
+    for (const key of ['consent','madeForKids','aiGenerated','ownBrand','branded','allowComment','allowDuet','allowStitch','shareToFeed','autoMusic']) {
+      if (value[key] !== undefined && typeof value[key] !== 'boolean') throw bad('Yayın seçeneği geçersiz.');
+    }
+    if (value.thumbnailId) {
+      const thumbnail = getMedia(value.thumbnailId);
+      if (platform !== 'youtube' || thumbnail?.kind !== 'image' || thumbnail.status !== 'available' || !/\.(jpg|png)$/.test(thumbnail.stored_name)) throw bad('YouTube kapağı için kullanılabilir JPEG veya PNG seçin.');
+    }
+    return JSON.stringify(Object.fromEntries(['privacy','consent','duration','madeForKids','aiGenerated','ownBrand','branded','allowComment','allowDuet','allowStitch','kind','shareToFeed','autoMusic','thumbnailId'].filter(key => value[key] !== undefined).map(key => [key, value[key]])));
+  }
+  function mediaOptions(post, media, options = JSON.parse(post.options)) {
+    if (post.platform === 'tiktok') {
+      if (post.media_id !== media?.id) { delete options.duration; options.consent = false; }
+      if (media?.kind === 'image' && media.ai_generated) options.aiGenerated = true;
+    }
+    return JSON.stringify(options);
   }
   async function locked(key, operation) {
     if (busy.has(key)) throw bad('Bu işlem zaten sürüyor. Tamamlanmasını bekleyin.', 409);
@@ -70,21 +93,27 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
     let video = getMedia(post.media_id);
     let reason = '';
     if (choose) {
-      const selection = await selectVideo(post.context, post.platform, post.model, availableVideos(), fetchImpl);
+      const selection = await selectVideo(post.context, post.platform, post.model, availableMedia(post).filter(item => item.kind === 'video'), fetchImpl);
       video = getMedia(selection.id); reason = selection.reason;
     }
     const copy = await socialCopy({ ...post, video }, fetchImpl);
-    db.prepare("UPDATE social_posts SET text=?,title=?,media_id=?,revision=revision+1,updated_at=? WHERE id=? AND status='draft'")
-      .run(copy.text, copy.title, video?.id || null, stamp(), post.id);
+    db.prepare("UPDATE social_posts SET text=?,title=?,media_id=?,options=?,revision=revision+1,updated_at=? WHERE id=? AND status='draft'")
+      .run(copy.text, copy.title, video?.id || null, mediaOptions(post, video), stamp(), post.id);
     return { post: getPost(post.id), reason };
   }
   function publishReady(post) {
     if (!post.account_id || account(post.account_id)?.platform !== post.platform) throw bad('Yayın için bağlı bir hesap seçin.');
     validateCopy(post.platform, post.text, post.title);
-    if (post.platform !== 'x' && getMedia(post.media_id)?.kind !== 'video') throw bad('Bu platform için MP4 video seçin.');
+    const asset = getMedia(post.media_id);
+    const options = JSON.parse(post.options);
+    if (!mediaFits(post.platform, asset, options)) throw bad(post.platform === 'instagram' ? 'Instagram gönderisi için JPEG, Reels için MP4 seçin.' : 'Bu paylaşım için uyumlu medya seçin. YouTube video, TikTok MP4/JPEG/WebP kabul eder.');
+    if (post.platform === 'instagram' || post.platform === 'tiktok' && asset?.kind === 'image') {
+      if (!deliveryReady()) throw bad('Bu paylaşım için herkese açık HTTPS adresi gerekli. API kurulum rehberini açın.');
+    }
+    validateOptions(post.platform, options);
     if (post.platform === 'tiktok') {
-      const options = JSON.parse(post.options);
-      if (!options.privacy || options.consent !== true || !Number.isFinite(options.duration) || options.duration <= 0) throw bad('TikTok görünürlüğü, video önizlemesi ve müzik kullanım onayı gerekli.');
+      if (asset?.kind === 'image' && post.title.length > 90) throw bad('TikTok fotoğraf başlığı en fazla 90 karakter olmalı.');
+      if (!options.privacy || options.consent !== true || asset?.kind === 'video' && (!Number.isFinite(options.duration) || options.duration <= 0)) throw bad('TikTok görünürlüğü, video önizlemesi ve müzik kullanım onayı gerekli.');
     }
   }
   async function send(post) {
@@ -92,8 +121,10 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
     if (!db.prepare("UPDATE social_posts SET status='publishing',error=NULL,updated_at=? WHERE id=? AND status IN ('draft','scheduled') AND revision=?").run(stamp(), post.id, post.revision).changes) throw bad('Gönderi değişti veya zaten işleniyor.', 409);
     try {
       const result = await publisher(store, post, getMedia(post.media_id), dataDir, fetchImpl);
-      db.prepare("UPDATE social_posts SET status='published',remote_id=?,remote_url=?,error=NULL,updated_at=? WHERE id=?").run(result.id, result.url, stamp(), post.id);
+      db.prepare("UPDATE social_posts SET status='published',remote_id=?,remote_url=?,error=?,updated_at=? WHERE id=?").run(result.id, result.url, result.warning || null, stamp(), post.id);
       if (post.media_id) await archiveMedia(store, dataDir, post.media_id);
+      const thumbnailId = JSON.parse(post.options).thumbnailId;
+      if (thumbnailId) await archiveMedia(store, dataDir, thumbnailId);
     } catch (error) {
       db.prepare('UPDATE social_posts SET status=?,error=?,updated_at=? WHERE id=?').run(error.uncertain ? 'uncertain' : 'failed', error.message, stamp(), post.id);
       throw error;
@@ -119,7 +150,8 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
         await locked(item.id, async () => {
           const post = getPost(item.id);
           const { post: ready } = await generate(post);
-          const options = ready.platform === 'youtube' ? { privacy: rule.privacy || 'private', madeForKids: Boolean(rule.madeForKids), aiGenerated: Boolean(rule.aiGenerated) } : {};
+          const options = ready.platform === 'youtube' ? { privacy: rule.privacy || 'private', madeForKids: Boolean(rule.madeForKids), aiGenerated: Boolean(rule.aiGenerated) }
+            : ready.platform === 'instagram' ? { kind: 'reel', shareToFeed: true } : {};
           db.prepare('UPDATE social_posts SET options=? WHERE id=?').run(JSON.stringify(options), ready.id);
           await send(getPost(ready.id));
         });
@@ -137,10 +169,10 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
       return respond({ posts: posts(), accounts: db.prepare('SELECT id,platform,remote_id,name,username FROM social_accounts ORDER BY platform,name').all(),
         media: media(), textModels, imageModels, textModel: process.env.OPENAI_TEXT_MODEL || 'gpt-6-luna', imageModel: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini',
         context: store.getSetting.get('social_context')?.value || '', folder: store.getSetting.get('social_folder')?.value || '',
-        openaiConfigured: Boolean(process.env.OPENAI_API_KEY), automation: getAutomation(),
+        openaiConfigured: Boolean(process.env.OPENAI_API_KEY), automation: getAutomation(), mediaDeliveryReady: deliveryReady(),
         connections: Object.fromEntries(platforms.map(platform => [platform, { configured: platformConfig(platform), callback: `${process.env.PUBLIC_BASE_URL}${platform === 'x' ? '/api/x/callback' : `/api/social/oauth/${platform}/callback`}` }])) });
     }
-    const oauth = path.match(/^\/api\/social\/oauth\/(youtube|tiktok)\/(connect|callback)$/);
+    const oauth = path.match(/^\/api\/social\/oauth\/(youtube|tiktok|instagram)\/(connect|callback)$/);
     if (req.method === 'GET' && oauth) {
       if (oauth[2] === 'connect') { res.writeHead(302, { Location: oauthStart(store, oauth[1]), 'Cache-Control': 'no-store' }); res.end(); return true; }
       let location = '/?social=connected';
@@ -179,7 +211,11 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
       return respond(await locked('library', () => scanFolder(store, dataDir, input.folder)));
     }
     if (req.method === 'POST' && path === '/api/social/library/upload') {
-      const name = decodeURIComponent(req.headers['x-file-name'] || 'video.mp4');
+      const name = decodeURIComponent(req.headers['x-file-name'] || 'medya');
+      if (req.headers['content-type']?.startsWith('image/')) {
+        const { stored, size } = await saveImage(req, dataDir);
+        return respond({ media: insertMedia(store, { name, stored, kind: 'image', size }) }, 201);
+      }
       const stored = await saveVideo(req, dataDir);
       const size = (await stat(join(dataDir, 'videos', stored))).size;
       return respond({ media: insertMedia(store, { name, stored, kind: 'video', size }) }, 201);
@@ -195,8 +231,9 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
       if (input.enabled === false) { store.setSetting.run('social_automation', JSON.stringify({ ...getAutomation(), enabled: false })); return respond({ ok: true }); }
       if (input.enabled !== true || !process.env.OPENAI_API_KEY || typeof input.context !== 'string' || !input.context.trim() || input.context.length > 20000 || !Array.isArray(input.targets) || !input.targets.length || input.targets.length > 20) throw bad('Bağlam, OpenAI anahtarı ve hedef hesaplar gerekli.');
       for (const target of input.targets) {
-        if (!['x','youtube'].includes(target.platform) || !target.accountId) throw bad('Otomatik akış X ve YouTube hesapları içindir. TikTok her gönderide ayrıca onay ister.');
+        if (!['x','youtube','instagram'].includes(target.platform) || !target.accountId) throw bad('Otomatik akış X, YouTube ve Instagram Reels içindir. TikTok her gönderide ayrıca onay ister.');
         validateTarget(target.platform, target.accountId);
+        if (target.platform === 'instagram' && !deliveryReady()) throw bad('Instagram otomatik yayını için herkese açık HTTPS adresi gerekli.');
       }
       if (new Set(input.targets.map(item => item.accountId)).size !== input.targets.length) throw bad('Aynı hesap iki kez seçilemez.');
       if (!Number.isInteger(input.intervalHours) || input.intervalHours < 1 || input.intervalHours > 168) throw bad('Aralık 1-168 saat olmalı.');
@@ -233,6 +270,8 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
         if (input.published !== true) throw bad('Yayını platform hesabında doğrulayın.');
         db.prepare("UPDATE social_posts SET status='published',error=NULL,updated_at=? WHERE id=?").run(stamp(), post.id);
         if (post.media_id) await archiveMedia(store, dataDir, post.media_id);
+        const thumbnailId = JSON.parse(post.options).thumbnailId;
+        if (thumbnailId) await archiveMedia(store, dataDir, thumbnailId);
         return respond({ post: getPost(post.id) });
       }
       if (post.status !== 'draft') throw bad('Bu gönderi düzenlenemez. Planı iptal edin veya başarısız yayını taslağa alın.', 409);
@@ -244,14 +283,17 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
         if (typeof input.text !== 'string' || input.text.length > 5000 || typeof input.title !== 'string' || input.title.length > 100) throw bad('Başlık veya metin çok uzun.');
         const selected = getMedia(input.mediaId);
         if (input.mediaId && (!selected || selected.status === 'published')) throw bad('Kullanılabilir bir medya seçin.');
+        const options = mediaOptions(post, selected, JSON.parse(validateOptions(post.platform, input.options || {})));
+        if (selected && !mediaFits(post.platform, selected, JSON.parse(options))) throw bad('Seçilen medya bu paylaşım türüne uygun değil.');
         if (!db.prepare("UPDATE social_posts SET title=?,text=?,account_id=?,media_id=?,options=?,context=?,model=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND status='draft'")
-          .run(input.title, input.text, validateTarget(post.platform, input.accountId), selected?.id || null, validateOptions(post.platform, input.options || {}), context, model, stamp(), post.id, input.revision).changes) throw bad('Gönderi başka sekmede değişti. Yenileyip tekrar deneyin.', 409);
+          .run(input.title, input.text, validateTarget(post.platform, input.accountId), selected?.id || null, options, context, model, stamp(), post.id, input.revision).changes) throw bad('Gönderi başka sekmede değişti. Yenileyip tekrar deneyin.', 409);
         return respond({ post: getPost(post.id) });
       }
       if (action === 'generate' || action === 'generate-video') return respond(await generate(post, action === 'generate-video'));
-      if (action === 'select-video') {
-        const selection = await selectVideo(post.context, post.platform, post.model, availableVideos(), fetchImpl);
-        db.prepare('UPDATE social_posts SET media_id=?,revision=revision+1,updated_at=? WHERE id=?').run(selection.id, stamp(), post.id);
+      if (action === 'select-video' || action === 'select-media') {
+        const selection = action === 'select-video' ? await selectVideo(post.context, post.platform, post.model, availableMedia(post).filter(item => item.kind === 'video'), fetchImpl)
+          : await selectMedia(post.context, post.platform, post.model, availableMedia(post), fetchImpl);
+        db.prepare('UPDATE social_posts SET media_id=?,options=?,revision=revision+1,updated_at=? WHERE id=?').run(selection.id, mediaOptions(post, getMedia(selection.id)), stamp(), post.id);
         return respond({ post: getPost(post.id), reason: selection.reason });
       }
       if (action === 'image') {
@@ -260,14 +302,16 @@ export function createSocialStudio({ store, dataDir, configPath, readJson, reply
         const result = await openaiRequest('images/generations', { model: imageModel, prompt: `Create a polished social media illustration. No invented product interfaces or claims. Context: ${post.context.slice(0, 12000)}. Post: ${post.text}. ${typeof input.prompt === 'string' ? input.prompt.slice(0, 2000) : ''}`, size: '1024x1024', quality: 'low', output_format: 'jpeg', n: 1 }, fetchImpl);
         if (!result.data?.[0]?.b64_json) throw bad('Görsel API yanıtı boş.');
         const bytes = Buffer.from(result.data[0].b64_json, 'base64');
-        if (!bytes.length || bytes.length > 5_000_000) throw bad('Görsel 5 MB sınırını aşıyor.');
+        validateImageBytes(bytes, '.jpg');
         const stored = `${randomUUID()}.jpg`;
         await mkdir(join(dataDir, 'images'), { recursive: true, mode: 0o700 });
         await writeFile(join(dataDir, 'images', stored), bytes, { mode: 0o600 });
-        const asset = insertMedia(store, { name: `${post.platform}-gorsel.jpg`, stored, kind: 'image', size: bytes.length });
-        // On video platforms the image is a separate creative asset, not a video attachment.
-        if (post.platform === 'x') db.prepare('UPDATE social_posts SET media_id=?,revision=revision+1 WHERE id=?').run(asset.id, post.id);
-        return respond({ media: asset, attached: post.platform === 'x' });
+        const asset = insertMedia(store, { name: `${post.platform}-gorsel.jpg`, stored, kind: 'image', size: bytes.length, aiGenerated: true });
+        // A YouTube image becomes a cover; a Reel keeps its video attachment.
+        const attached = mediaFits(post.platform, asset, JSON.parse(post.options));
+        if (attached) db.prepare('UPDATE social_posts SET media_id=?,options=?,revision=revision+1 WHERE id=?').run(asset.id, mediaOptions(post, asset), post.id);
+        if (post.platform === 'youtube') db.prepare("UPDATE social_posts SET options=json_set(options,'$.thumbnailId',?),revision=revision+1 WHERE id=?").run(asset.id, post.id);
+        return respond({ media: asset, attached, thumbnail: post.platform === 'youtube' });
       }
       if (action === 'publish') return respond({ post: await send(post) });
       if (action === 'schedule') {

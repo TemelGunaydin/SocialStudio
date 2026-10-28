@@ -1,7 +1,7 @@
 {
   "name": "social-studio",
   "version": "1.0.0",
-  "description": "Local-first multi-account social publishing studio with OpenAI and a local video library",
+  "description": "Local-first multi-account social publishing studio with OpenAI and a shared media library",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/TemelGunaydin/SocialStudio.git" },
   "bugs": { "url": "https://github.com/TemelGunaydin/SocialStudio/issues" },

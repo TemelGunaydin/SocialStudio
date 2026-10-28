@@ -7,12 +7,13 @@ Social Studio, sosyal medya hesapların için içerik hazırlayıp paylaşabilec
 ## Neler yapabilirsin?
 
 - X için metin, görsel veya video paylaşımı hazırlayabilirsin.
-- YouTube için video başlığı ve açıklaması hazırlayıp video yükleyebilirsin.
-- TikTok için video ve açıklama hazırlayabilir, her gönderinin ayarlarını onaylayarak yayınlayabilirsin.
+- YouTube için birden fazla kanal bağlayıp video başlığı, açıklama ve özel kapakla video yayınlayabilirsin.
+- Instagram için görsel gönderileri ve Reels yayınlayabilirsin.
+- TikTok için video veya fotoğraf ve açıklama hazırlayabilir, her gönderinin ayarlarını onaylayarak yayınlayabilirsin.
 - Türkçe veya başka bir dilde yazdığın notlardan İngilizce paylaşım metni ve görsel üretebilirsin.
 - Luna dahil, hesabında erişimin olan modellerden seçim yapabilirsin.
-- Video klasörünü tanıtıp AI'ın dosya adlarına ve notlarına göre seçim yapmasını sağlayabilirsin.
-- X ve YouTube hesapların için düzenli otomatik paylaşım açabilirsin.
+- Görsel/video klasörünü tanıtıp AI'ın dosya adlarına ve notlarına göre seçim yapmasını sağlayabilirsin.
+- X, YouTube ve Instagram Reels için düzenli otomatik paylaşım açabilirsin.
 
 Taslak oluşturmak paylaşım yapmaz. Otomatik paylaşım, sen ayrıca izin verip etkinleştirene kadar kapalıdır.
 
@@ -39,12 +40,13 @@ Henüz herkese açık, imzalı bir Mac uygulaması indirmesi bulunmuyor. Gelişt
 **API**, uygulamanın başka bir hizmetle senin izninle iletişim kurmasını sağlayan bağlantıdır. API kullanımı, sağlayıcıya göre ücret, kredi veya onay gerektirebilir.
 
 1. **API ve modeller** sayfasını aç. AI özelliklerini kullanacaksan OpenAI API anahtarını ekle. Metin ve görsel için ayrı model seçebilirsin.
-2. Paylaşım yapacağın platformların geliştirici uygulaması bilgilerini aynı sayfaya gir. Gösterilen **Callback / yönlendirme adresi** değerini ilgili sağlayıcının uygulama ayarlarına aynen ekle. Bu adres, hesap izni verdikten sonra panele dönmeni sağlar.
-3. **Sosyal hesaplar** sayfasından hesabını bağla. İkinci bir hesap eklemek için aynı işlemi o hesapla tekrarla.
+2. **Sosyal hesaplar** sayfasında ilgili platformun **Bağlantıyı hazırla** düğmesini aç. Üç adımlı rehberde geliştirici portalına git, yönlendirme adresini kopyala ve uygulama bilgilerini gir.
+3. **Kaydet ve hesabı bağla** düğmesine bas. Platformun kendi izin ekranında hesabını seçip onayla.
+4. İkinci hesap için **Başka hesap ekle** düğmesini kullan. YouTube'da her seferinde ilgili Google hesabını ve YouTube kanalını seç; önceki bağlantı korunur.
 
 Sosyal medya şifreni bu panele girmezsin; izni platformun kendi sayfasında verirsin. Kaydedilmiş bir anahtar alanını boş bırakırsan mevcut değeri korunur.
 
-X için [adım adım kurulum rehberi](x-setup.md), diğer teknik bağlantılar için [ayrıntılı rehber](advanced-usage.md#developer-api-setup-and-provider-limits) var. Hesap bağlamadan ve API anahtarı eklemeden de elle taslak hazırlayabilirsin.
+X için [adım adım kurulum rehberi](x-setup.md), YouTube / Instagram / TikTok için [adım adım API rehberi](platform-setup-tr.md) var. Hesap bağlamadan ve API anahtarı eklemeden de elle taslak hazırlayabilirsin.
 
 ## 3. İlk paylaşımını hazırla
 
@@ -54,7 +56,7 @@ X için [adım adım kurulum rehberi](x-setup.md), diğer teknik bağlantılar i
    > Uygulamam sesli notları metne dönüştürüyor. İçerik üreticilerine yönelik, kısa ve samimi bir İngilizce paylaşım yaz. Vermediğim özellikleri ekleme ve sonuç garantisi verme.
 
 3. Modelini ve hedef hesaplarını seç. **Taslakları oluştur** düğmesine bas. Metni kendin yazacaksan **Metinleri AI ile hazırla** seçimini kaldır.
-4. Her hesabın düzenleme alanında metni kontrol et. **Video yükle** ile dosya ekle, kütüphaneden seç veya **AI video seçsin** düğmesini kullan. **Görsel üret** ile resim oluşturabilirsin. YouTube ve TikTok'ta yayın için video gerekir; görsel üretmek videoya dönüştürme yapmaz.
+4. Her hesabın düzenleme alanında metni kontrol et. **Klasörden / kütüphaneden seç** düğmesiyle klasör tara, dosyaları önizle, adla ara ve seç. **Dosya yükle**, **AI medya seçsin** ve **Görsel üret** seçenekleri de var. Instagram'da **Gönderi / Reels** türünü seç. YouTube için MP4 video ve istersen JPEG/PNG kapak kullan.
 5. Doğru hesabı seçtiğinden emin ol, medyayı önizle ve gerekiyorsa görünürlük ile içerik bildirimlerini düzenle.
 6. **Taslağı kaydet** ile sakla, **Şimdi paylaş** ile yayınla veya **İleri bir zamana planla** bölümünden zamanı seçip onayla.
 
@@ -68,29 +70,29 @@ Bütün taslaklarını ve yayın durumlarını **Paylaşım kuyruğu** sayfasın
 
 Planlama İstanbul saatine göredir. Bilgisayar ve uygulama açık olmalı. Plan saatinde kapalıysa onaylanmış gönderi uygulamayı tekrar açtığında yayınlanabilir. **Kontrol gerekli** durumunda önce platform hesabını kontrol et; gönderi yayınlanmış olabilir.
 
-## 4. Video klasörünü ekle
+## 4. Görsel/video klasörünü ekle
 
-**Medya kütüphanesi** sayfasında **Klasör seç** düğmesine bas. Açılan pencerede video klasörünü bulup **Bu klasörü seç** düğmesine bas; klasör yolu otomatik doldurulur. Videoları içe almak için **Klasörü tara** düğmesini kullan. İstersen yolu elle de yazabilirsin. Mac için örnek:
+**Medya kütüphanesi** sayfasında **Klasör seç** düğmesine bas. Açılan pencerede medya klasörünü bulup **Bu klasörü seç** düğmesine bas; klasör yolu otomatik doldurulur. Dosyaları içe almak için **Klasörü tara** düğmesini kullan. İstersen yolu elle de yazabilirsin. Mac için örnek:
 
 ```text
 /Users/Adin/Movies/SosyalMedya
 ```
 
-Windows'ta kendi Windows klasör yolunu kullan. Klasör, uygulamanın çalıştığı bilgisayarda olmalı. En fazla **100 MB** büyüklüğündeki MP4 dosyaları içe alınır. Alt klasörler taranmaz ve videolar başka bir biçime dönüştürülmez.
+Windows'ta kendi Windows klasör yolunu kullan. Klasör, uygulamanın çalıştığı bilgisayarda olmalı. MP4 videolar en fazla **100 MB**, JPEG/PNG/WebP görseller en fazla **5 MB** olabilir. Alt klasörler taranmaz ve dosyalar dönüştürülmez. Instagram görsel gönderilerinde JPEG, TikTok fotoğraflarında JPEG/WebP, YouTube kapaklarında JPEG/PNG kullan.
 
-Dosyaları `sesli-notlar-demo.mp4` gibi açıklayıcı adlandır. **AI, dosya adını ve verdiğin notları kullanır; videoyu izlemez veya konuşmaları çözümlemez.**
+Dosyaları `sesli-notlar-demo.mp4` gibi açıklayıcı adlandır. **AI, dosya adını ve verdiğin notları kullanır; görseli incelemez, videoyu izlemez veya konuşmaları çözümlemez.**
 
 Dosyaların nasıl düzenlenir?
 
 1. Tarama sırasında önizleme ve yayın için özel bir kopya oluşturulur. Orijinal dosya yerinde kalır.
-2. Aynı videoyu kullanan bütün gönderiler başarıyla yayınlandığında orijinal, kendi klasöründeki `paylasildi/` alt klasörüne taşınır.
+2. Aynı medyayı veya video kapağını kullanan bütün gönderiler başarıyla yayınlandığında orijinal, kendi klasöründeki `paylasildi/` alt klasörüne taşınır.
 3. Bir gönderi hâlâ taslaksa, başarısızsa veya sonucu belirsizse orijinal taşınmaz. Taşıma hatası varsa kütüphanedeki hata mesajından yeniden deneyebilirsin.
 
 Tarayıcıdan tek dosya yüklediğinde kaynak klasör izni verilmez; bu nedenle bilgisayarındaki orijinal dosya taşınmaz.
 
 ## 5. Düzenli otomatik paylaşımı aç
 
-Bu akış **X ve YouTube** içindir. TikTok'ta her gönderinin ayarlarını ayrıca onaylaman gerekir.
+Bu akış **X, YouTube ve Instagram Reels** içindir. Instagram videosu profil akışında da gösterilir. TikTok'ta her gönderinin ayarlarını ayrıca onaylaman gerekir.
 
 1. Videolarını kütüphaneye ekle veya bir video klasörü bağla.
 2. **Otomatik akış** sayfasında bağlamı, modeli, hesapları ve paylaşım aralığını belirle. Aralık 1-168 saat olabilir.
@@ -98,6 +100,12 @@ Bu akış **X ve YouTube** içindir. TikTok'ta her gönderinin ayarlarını ayr�
 4. Otomatik yayın iznini işaretle ve **Onayla ve akışı başlat** düğmesine bas.
 
 İlk paylaşım hemen yapılmaz; seçtiğin aralık dolduğunda yapılır. Her çalışmada video seçilir, hesap başına metin hazırlanır ve paylaşılır. Bağladığın klasör de yeniden taranır. Bilgisayar ve uygulama açık kalmalı. Gelecek çalışmaları durdurmak için **Otomatik akışı durdur** düğmesini kullan.
+
+## Instagram ve TikTok fotoğrafları için HTTPS
+
+Instagram'ın ve TikTok'un seçtiğin dosyayı indirebilmesi için uygulamanın herkese açık HTTPS adresi olmalı. `localhost` ve yalnızca Tailscale cihazlarına açık adresler yeterli değildir. Uygulama sadece seçili medya için bir saat geçerli imzalı bir bağlantı oluşturur. Diğer dosyalar ve panel işlemleri oturum gerektirir.
+
+Instagram hesabın Business veya Creator olmalı. TikTok fotoğraflarında medya alan adını / URL önekini Developer Portal'da doğrulamalısın. Kurulum ve onay sınırları [API rehberinde](platform-setup-tr.md).
 
 ## Ücretler ve verilerin
 

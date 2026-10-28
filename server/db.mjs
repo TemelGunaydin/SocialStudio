@@ -53,7 +53,7 @@ export function openStore(dataDir) {
     );
     CREATE TABLE IF NOT EXISTS media_library (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, source_path TEXT UNIQUE,
-      stored_name TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL,
+      stored_name TEXT NOT NULL, kind TEXT NOT NULL, size INTEGER NOT NULL, ai_generated INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'available', created_at TEXT NOT NULL, error TEXT
     );
     CREATE TABLE IF NOT EXISTS social_posts (
@@ -67,6 +67,11 @@ export function openStore(dataDir) {
     );
     CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY, result TEXT NOT NULL, error TEXT, created_at TEXT NOT NULL);
   `);
+  if (!db.prepare('PRAGMA table_info(media_library)').all().some(column => column.name === 'ai_generated')) {
+    db.exec('ALTER TABLE media_library ADD COLUMN ai_generated INTEGER NOT NULL DEFAULT 0');
+    // Images in the original library could only be created with AI.
+    db.exec("UPDATE media_library SET ai_generated=1 WHERE kind='image'");
+  }
   // Expand-only migration: old drafts keep their project IDs; new installs start empty.
   // INSERT OR IGNORE also repairs interrupted migrations without overwriting edited projects.
   if (!db.prepare("SELECT 1 FROM settings WHERE key = 'projects_migrated'").get()) {
