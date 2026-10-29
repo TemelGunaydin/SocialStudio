@@ -6,6 +6,10 @@ Bu rehber, geliştirici uygulaması oluşturmaktan hesabını panelde görmeye k
 
 Doğrudan git: [YouTube](#youtube-birden-fazla-hesap-veya-kanal) · [Instagram](#instagram-gönderi-ve-reels) · [TikTok](#tiktok-video-ve-fotoğraf) · [HTTPS kurulumu](#instagram-ve-tiktok-fotoğrafları-için-herkese-açık-https) · [Bağlantı sorunları](#bağlantı-sorunları)
 
+![Sosyal hesaplar sayfasında iki X hesabı, iki YouTube kanalı, bir Instagram ve bir TikTok hesabı; her platformda ayrı hesap ekleme ve kurulum rehberi düğmeleri](assets/social-accounts.png)
+
+*Görseller, gerçek Social Studio arayüzünden örnek hesaplarla alınmıştır. Gerçek hesap veya anahtar içermez. Görsele tıklayarak tam boyutunu açabilirsin. Yeni hesap için **Başka hesap ekle**, bağlantı ayarları için **3 adımda kurulum rehberi** düğmesini kullan.*
+
 ## Başlamadan önce
 
 Önce panelin yerel ilk kurulumunu tamamla ve bir panel şifresi belirle. Sonra **Sosyal hesaplar > ilgili platform > Bağlantıyı hazırla** düğmesini aç. Bağlantıyı önceden hazırladıysan **3 adımda kurulum rehberi** düğmesini kullan.
@@ -35,6 +39,10 @@ Sosyal medya şifreni panele girmezsin; platformun kendi sayfasında giriş yapa
 
 Yönetebildiğin bir YouTube kanalı olan Google hesabı gerekiyor. Aynı Google Cloud projesi ve OAuth istemcisiyle birden fazla kanal bağlayabilirsin.
 
+![YouTube bağlantı ekranı: yönlendirme adresi, Adresi kopyala düğmesi, OAuth Client ID, Client secret ve Kaydet ve hesabı bağla düğmesi](assets/youtube-setup.png)
+
+*Bu, Social Studio içindeki YouTube kurulum ekranıdır. Resimdeki örnek adresi kullanma; kendi panelinden kopyala. Google Cloud'da oluşturacağın iki bilgiyi burada gösterilen alanlara gireceksin.*
+
 1. **Google Cloud projesi oluştur.** [Google Cloud Console](https://console.cloud.google.com/) sayfasını aç. Üstteki proje seçicisinden yeni proje oluştur veya mevcut projeni seç. Örneğin `Social Studio` adını verebilirsin. Sonraki adımlarda aynı proje seçili kalsın.
 2. **YouTube API'sini aç.** [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) sayfasında **Enable / Etkinleştir** düğmesine bas.
 3. **İzin ekranını hazırla.** **Google Auth Platform > Branding** bölümünü aç. İlk kurulumsa **Get Started** ile başla. Uygulama adını, destek e-postasını ve iletişim e-postasını gir. Kişisel Gmail hesapları için **Audience > External** seç. Uygulama **Testing** durumundayken **Audience > Test users > Add users** bölümüne kullanacağın Google hesaplarının e-posta adreslerini ekle. [Google izin ekranı rehberi](https://developers.google.com/workspace/guides/configure-oauth-consent)
@@ -61,6 +69,10 @@ Eski bir bağlantıyla plan düzenleme izni hatası alırsan aynı kanalı yenid
 
 **Business** veya **Creator** profesyonel hesabı gerekiyor. Panelimiz **Instagram API with Instagram Login** kullanır. Bu yöntem Facebook Sayfası bağlamanı gerektirmez. Önce [HTTPS kurulumunu](#instagram-ve-tiktok-fotoğrafları-için-herkese-açık-https) tamamla; Meta hem görseli hem Reels videosunu buradan indirecek.
 
+![Instagram bağlantı ekranı: HTTPS yönlendirme adresi, Instagram App ID, Instagram App Secret ve gerekli paylaşım izinleri](assets/instagram-setup.png)
+
+*Buradaki iki alana Meta'nın **Instagram Login** ürününe ait bilgileri gireceksin. Görseldeki alan adı örnektir; kendi panelinde gösterilen HTTPS adresini kullan.*
+
 1. **Instagram hesabını hazırla.** Instagram ayarlarında hesap türü / profesyonel hesap bölümünü bul. Gerekiyorsa hesabını **Business** veya **Creator** türüne geçir. Bağlayacağın her hesap için bunu kontrol et.
 2. **Meta uygulamasını oluştur.** [Meta Developers](https://developers.facebook.com/apps/) sayfasında **Create App** seç. Uygulama adı ve iletişim bilgilerini doldur. **Instagram API with Instagram Login** sağlayan Instagram kullanım senaryosunu / ürününü seç. Uygulama türü sorulursa bu ürünü destekleyen türü, genellikle **Business**, seç. Meta'nın menü adları uygulama yapılandırmasına göre değişebilir.
 3. **Test hesabını ekle.** Geliştirme sırasında Instagram ürününün test hesapları veya **App roles / Instagram Tester** bölümünden kullanacağın Instagram hesabını ekle. O Instagram hesabına giriş yapıp uygulama/site izinleri bölümündeki tester davetini varsa kabul et. Yalnızca davet göndermek izin vermeye yetmeyebilir.
@@ -82,6 +94,10 @@ Panel medyayı hazırlar, Meta'nın işleme sonucunu bekler ve sonra yayınlar. 
 ## TikTok: video ve fotoğraf
 
 **Herkese açık yayın için başvurmadan önce:** TikTok, yalnızca senin veya ekibinin hesaplarına içerik yüklemeyi amaçlayan özel araçları Direct Post kurallarında uygun kullanım olarak kabul etmiyor. Social Studio kişisel bir paneldir; hesabı bağlamak veya gizli paylaşımı test etmek herkese açık API yayını için onay alacağın anlamına gelmez. [TikTok kullanım kuralları](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+
+![TikTok bağlantı ekranı: Login Kit ve Direct Post adımları, HTTPS yönlendirme adresi, Client key, Client secret ve herkese açık yayın koşulları](assets/tiktok-setup.png)
+
+*TikTok'ta uygulama kimliğinin adı **Client key**. Yönlendirme adresini kendi panelinden kopyala, key ve secret bilgilerini gir, ardından **Kaydet ve hesabı bağla** düğmesine bas.*
 
 1. **Geliştirici uygulaması oluştur.** [TikTok Developers](https://developers.tiktok.com/apps/) üzerinde giriş yap. **Manage apps > Connect an app** ile uygulama bilgilerini doldur. Panel Mac'te çalışsa bile mevcut OAuth akışımız için **Web** seç. Gerçek HTTPS web sitesi adresini gir. [Uygulama kayıt rehberi](https://developers.tiktok.com/docs/en/getting-started-create-an-app)
 2. **Sandbox oluştur.** Uygulama sayfasında **Sandbox > Create Sandbox** seç. **Sandbox settings > Target users > Add account** yolundan test edeceğin TikTok hesabına giriş yap. Diğer test hesaplarını da ekleyebilirsin; en fazla 10 hedef hesap desteklenir. Listede görünmeleri bir saate kadar sürebilir. Bu işlem herkese açık paylaşım onayı değildir. [Sandbox rehberi](https://developers.tiktok.com/docs/en/add-a-sandbox)

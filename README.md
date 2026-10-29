@@ -1,3 +1,5 @@
+<img src="docs/assets/social-studio-logo.png" alt="Social Studio logo: a mint S and play symbol on a dark petrol tile" width="128" height="128">
+
 # Social Studio
 
 [![CI](https://github.com/TemelGunaydin/SocialStudio/actions/workflows/ci.yml/badge.svg)](https://github.com/TemelGunaydin/SocialStudio/actions/workflows/ci.yml) · [Türkçe rehber](docs/quick-start-tr.md) · [MIT license](LICENSE)
@@ -11,6 +13,10 @@ It is designed for one person managing their own accounts. You can connect more 
 > The app is currently in Turkish. This guide includes the exact button and page names you will see. A [Turkish getting-started guide](docs/quick-start-tr.md) is also available.
 
 **Account setup:** [YouTube](#youtube-google-cloud-and-oauth) · [Instagram](#instagram-meta-developer-and-oauth) · [TikTok](#tiktok-developer-and-oauth) · [Türkçe adım adım kurulum](docs/platform-setup-tr.md)
+
+![Social Studio content editor with context notes, account selections, an English draft, and a media selector](docs/assets/studio-overview.png)
+
+*The actual dashboard with fictional demo accounts and draft content. The screenshots below use an example domain and contain no real credentials. Click an image to see it at full size.*
 
 ## What can it do?
 
@@ -62,6 +68,10 @@ An **API connection** lets Social Studio communicate with another service with y
 
 You do not enter your social account passwords into Social Studio. You approve access on the provider's own page. Leaving a saved credential field blank keeps its current value.
 
+![Social accounts page showing two X accounts, two YouTube channels, an Instagram account, and a TikTok account, with separate add-account and setup-guide buttons](docs/assets/social-accounts.png)
+
+*Open a platform's **3 adımda kurulum rehberi** to configure it, or **Başka hesap ekle** to authorize another account. Names above are examples.*
+
 The instructions below take you from creating a developer app to seeing your account in Social Studio. You configure one developer app per platform, then authorize each social account separately. For X, use the [X setup guide](docs/x-setup.md). The same instructions for YouTube, Instagram, and TikTok are available in [Turkish](docs/platform-setup-tr.md).
 
 ### Before you connect: addresses and permissions
@@ -95,6 +105,10 @@ For proxy timeouts, media requests, and private-network limitations, see the [HT
 
 You need a Google account with a YouTube channel you can manage. One Google Cloud project and OAuth client can connect multiple accounts or channels.
 
+![YouTube setup dialog showing the copyable callback, OAuth Client ID, Client secret, and Save and connect account button](docs/assets/youtube-setup.png)
+
+*This is the YouTube setup screen inside Social Studio. Copy the callback from your own running panel, then paste the credentials created in Google Cloud into the two fields shown here.*
+
 1. **Create a project.** Open [Google Cloud Console](https://console.cloud.google.com/), use the project selector to create or select a project, and keep that project selected throughout setup. A name such as `Social Studio` is enough.
 2. **Enable the YouTube API.** Open [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) and click **Enable**.
 3. **Prepare the permission screen.** Open **Google Auth Platform > Branding** and, if prompted, **Get Started**. Enter the app name, support email, and contact email. For personal Gmail accounts, choose **External** under **Audience**. While the app is in **Testing**, add every Google account you will use under **Audience > Test users > Add users**. [Google's consent-screen guide](https://developers.google.com/workspace/guides/configure-oauth-consent)
@@ -119,6 +133,10 @@ You need a Google account with a YouTube channel you can manage. One Google Clou
 
 You need an Instagram **Business** or **Creator** professional account. Our integration uses **Instagram API with Instagram Login**. A Facebook Page is not required for this connection method.
 
+![Instagram setup dialog showing the HTTPS callback, Instagram App ID, Instagram App Secret, and required publishing permissions](docs/assets/instagram-setup.png)
+
+*Use the credentials from Meta's **Instagram Login** product. The example HTTPS address in this screenshot must be replaced by the address shown in your own panel.*
+
 1. **Prepare the Instagram account.** In Instagram settings, find the account type/professional account controls and switch to **Business** or **Creator** if needed. Repeat for each account you want to connect.
 2. **Create a Meta app.** Open [Meta for Developers](https://developers.facebook.com/apps/) and choose **Create App**. Complete the app name and contact information. Select the Instagram API use case/product that provides **Instagram API with Instagram Login**. If the wizard asks for an app type, choose the type supporting that product, commonly **Business**. Meta's menu names can vary by app configuration.
 3. **Add your test accounts.** While developing, add the Instagram account through the app's Instagram test-account or **App roles / Instagram Tester** controls. Sign into that Instagram account and accept any tester invitation in its app/website permission settings. Adding an invitation without accepting it may leave the account unable to authorize.
@@ -134,6 +152,10 @@ You need an Instagram **Business** or **Creator** professional account. Our inte
 ### TikTok: Developer and OAuth
 
 **Read this before applying for public posting:** TikTok's Direct Post rules exclude tools intended only to upload to accounts you or your team manages. Social Studio is a personal dashboard, so connecting an account or passing a private test does not guarantee approval for public API posting. [TikTok's intended-use rules](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+
+![TikTok setup dialog showing Login Kit and Direct Post instructions, the HTTPS callback, Client key, Client secret, and public-posting restrictions](docs/assets/tiktok-setup.png)
+
+*TikTok calls its application identifier **Client key**. Copy the callback from your own panel, enter the key and secret, then choose **Kaydet ve hesabı bağla**.*
 
 1. **Create a developer app.** Sign into [TikTok for Developers](https://developers.tiktok.com/apps/), open **Manage apps > Connect an app**, and fill in the app details. Select **Web** for this project's current OAuth flow, even if Social Studio runs on your Mac. Enter your real HTTPS website address. [TikTok app registration](https://developers.tiktok.com/docs/en/getting-started-create-an-app)
 2. **Start with a Sandbox.** Switch the app to **Sandbox > Create Sandbox**. Under **Sandbox settings > Target users > Add account**, sign into each TikTok account you want to test. Up to 10 target accounts can be added; appearing in the list can take up to an hour. These are test accounts, not public-posting approval. [Sandbox guide](https://developers.tiktok.com/docs/en/add-a-sandbox)
