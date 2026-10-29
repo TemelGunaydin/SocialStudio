@@ -2,9 +2,27 @@
 
 [Başlangıç rehberi](quick-start-tr.md) · [English README](../README.md)
 
-Bu panel kendi geliştirici uygulamaların üzerinden paylaşım yapar. Sosyal medya şifren panele kaydedilmez. OAuth, platformun kendi ekranında hesabını seçip uygulamaya izin vermendir.
+Bu rehber, geliştirici uygulaması oluşturmaktan hesabını panelde görmeye kadar bütün bağlantı adımlarını açıklar. Her platform için bir geliştirici uygulaması hazırlarsın; aynı platformdaki diğer hesaplarını bu uygulamayla ayrı ayrı bağlarsın. Her hesap için yeniden geliştirici uygulaması oluşturman gerekmez.
 
-Önce panelin yerel ilk kurulumunu tamamla. Sonra **Sosyal hesaplar > Bağlantıyı hazırla** düğmesini aç. Her platformun üç adımlı rehberi, kopyalanabilir yönlendirme adresi ve **Kaydet ve hesabı bağla** düğmesi var. API bilgilerini daha sonra **API ve modeller** sayfasından değiştirebilirsin. Boş alan mevcut değeri korur; geliştirici uygulamasını değiştirirsen o platformun hesaplarını yeniden bağlaman gerekir.
+Doğrudan git: [YouTube](#youtube-birden-fazla-hesap-veya-kanal) · [Instagram](#instagram-gönderi-ve-reels) · [TikTok](#tiktok-video-ve-fotoğraf) · [HTTPS kurulumu](#instagram-ve-tiktok-fotoğrafları-için-herkese-açık-https) · [Bağlantı sorunları](#bağlantı-sorunları)
+
+## Başlamadan önce
+
+Önce panelin yerel ilk kurulumunu tamamla ve bir panel şifresi belirle. Sonra **Sosyal hesaplar > ilgili platform > Bağlantıyı hazırla** düğmesini aç. Bağlantıyı önceden hazırladıysan **3 adımda kurulum rehberi** düğmesini kullan.
+
+| Ekranda göreceğin terim | Ne anlama geliyor? |
+| --- | --- |
+| OAuth | Google, Instagram veya TikTok'un kendi ekranında hesabını seçip uygulamaya izin vermen |
+| Redirect URI / callback / yönlendirme adresi | İzin verdikten sonra platformun seni panele geri gönderdiği adres |
+| Client ID / Client key ve Client secret | Geliştirici uygulamanı tanıtan bilgiler; sosyal medya şifren değildir |
+| Scope / permission | Video yükleme gibi belirli bir işlem için istenen izin |
+| Sandbox / Testing | Platformun sınırlı deneme ortamı; herkese açık yayın onayı anlamına gelmez |
+
+**Yönlendirme adresini paneldeki Adresi kopyala düğmesiyle al.** Aşağıdaki adresler örnektir. `localhost` ile `127.0.0.1`, farklı portlar, `http` ile `https` ve sondaki fazladan `/` aynı adres değildir. Sağlayıcıya panelin gösterdiği adresi aynen kaydet.
+
+YouTube yerel `http://localhost:3000` adresinde bağlanabilir. Bu projenin Instagram ve TikTok bağlantıları HTTPS adresi kullanır. Henüz böyle bir adresin yoksa önce [HTTPS kurulumunu](#instagram-ve-tiktok-fotoğrafları-için-herkese-açık-https) tamamla. Instagram için hazırladığın HTTPS adresini TikTok ve YouTube için de kullanabilirsin.
+
+Sosyal medya şifreni panele girmezsin; platformun kendi sayfasında giriş yaparsın. Erişim token'larını elle oluşturman gerekmez, uygulama bunları alır ve yeniler. API bilgilerini daha sonra **API ve modeller** sayfasından değiştirebilirsin. Boş alan mevcut değeri korur; geliştirici uygulamasını değiştirirsen o platformun hesaplarını yeniden bağlaman gerekir.
 
 | Platform | Panelden paylaşım | Gereken hesap / erişim |
 | --- | --- | --- |
@@ -15,50 +33,82 @@ Bu panel kendi geliştirici uygulamaların üzerinden paylaşım yapar. Sosyal m
 
 ## YouTube: birden fazla hesap veya kanal
 
-1. [Google Cloud](https://console.cloud.google.com/apis/library/youtube.googleapis.com) üzerinde proje oluştur veya mevcut projeni seç. **YouTube Data API v3** hizmetini etkinleştir.
-2. **Google Auth Platform** bölümünde uygulama adını, destek adresini ve OAuth izin ekranını hazırla. Uygulama test modundaysa kullanacağın Google hesaplarını **Test users** listesine ekle.
-3. **Clients > Create client > Web application** ile OAuth istemcisi oluştur.
-4. Panelin verdiği adresi **Authorized redirect URIs** listesine aynen ekle. Yerel örnek: `http://localhost:3000/api/social/oauth/youtube/callback`. HTTPS kullanıyorsan panelin gösterdiği HTTPS adresini kullan.
-5. **Client ID** ve **Client secret** değerlerini paneldeki rehbere gir. **Kaydet ve hesabı bağla** düğmesine bas.
-6. Google ekranında yayın yapacağın hesabı ve varsa ilgili YouTube / marka kanalını seç. Kanalı okuma ve video yükleme izinlerini onayla.
-7. **Sosyal hesaplar > YouTube > Başka hesap ekle** ile ikinci hesap veya kanalı bağla. İlk kanalın izni korunur. Aynı kanalı tekrar bağlarsan sadece o kanalın izni yenilenir.
+Yönetebildiğin bir YouTube kanalı olan Google hesabı gerekiyor. Aynı Google Cloud projesi ve OAuth istemcisiyle birden fazla kanal bağlayabilirsin.
 
-Taslak oluştururken iki kanalı da işaretleyebilirsin. Her kanalın metni, videosu, kapağı ve görünürlüğü ayrı düzenlenir. **Şimdi paylaş** ilgili taslağın seçili kanalına yükler.
+1. **Google Cloud projesi oluştur.** [Google Cloud Console](https://console.cloud.google.com/) sayfasını aç. Üstteki proje seçicisinden yeni proje oluştur veya mevcut projeni seç. Örneğin `Social Studio` adını verebilirsin. Sonraki adımlarda aynı proje seçili kalsın.
+2. **YouTube API'sini aç.** [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) sayfasında **Enable / Etkinleştir** düğmesine bas.
+3. **İzin ekranını hazırla.** **Google Auth Platform > Branding** bölümünü aç. İlk kurulumsa **Get Started** ile başla. Uygulama adını, destek e-postasını ve iletişim e-postasını gir. Kişisel Gmail hesapları için **Audience > External** seç. Uygulama **Testing** durumundayken **Audience > Test users > Add users** bölümüne kullanacağın Google hesaplarının e-posta adreslerini ekle. [Google izin ekranı rehberi](https://developers.google.com/workspace/guides/configure-oauth-consent)
+4. **İzinleri ekle.** **Data Access > Add or Remove Scopes** bölümüne aşağıdaki üç izni ekle ve kaydet. Aramada çıkmazsa tam adreslerini elle gir.
 
-İstenen izinler: `youtube.upload`, `youtube.readonly` ve `youtube.force-ssl`. Son izin, yüklenmiş videonun yayın planını değiştirmek / iptal etmek için video düzenleme yetkisi sağlar. Eski bir bağlantıyla plan düzenleme izni hatası alırsan aynı kanalı yeniden bağla. Özel kapak yükleyebilmek için kanalın bu özelliğe erişimi de olmalı. Video başarıyla yüklenir ama kapak reddedilirse panel videoyu yayınlandı olarak tutar ve kapak hatasını gösterir; ikinci bir video yüklemez.
+   | İzin | Panelde ne için kullanılıyor? |
+   | --- | --- |
+   | `https://www.googleapis.com/auth/youtube.readonly` | Bağlanan kanalı ve video durumunu okuma |
+   | `https://www.googleapis.com/auth/youtube.upload` | Seçtiğin videoyu yükleme |
+   | `https://www.googleapis.com/auth/youtube.force-ssl` | Yüklenmiş videonun yayın planını değiştirme veya iptal etme; Google'daki bu izin başka video, yorum ve altyazı işlemlerini de kapsar |
 
-Google'ın test modundaki izinleri süreli olabilir. Yayınlama, kanal izinlerine, video işleme sonucuna ve güncel YouTube API politikalarına bağlıdır. [Google OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [video yükleme](https://developers.google.com/youtube/data/reference/rest/v3/videos/insert), [özel kapak](https://developers.google.com/youtube/data/reference/rest/v3/thumbnails/set).
+5. **OAuth istemcisi oluştur.** **Clients > Create client > Web application** seç ve bir ad ver. **Authorized redirect URIs** alanına panelin **Sosyal hesaplar > YouTube > Bağlantıyı hazırla** bölümündeki adresi yapıştır. Yerel örnek: `http://localhost:3000/api/social/oauth/youtube/callback`. HTTPS kullanıyorsan paneldeki HTTPS adresini kopyala. Bu sunucu bağlantısı için **Authorized JavaScript origins** doldurman gerekmiyor.
+6. **Bilgileri panele gir.** Oluşturulan **Client ID** değerini paneldeki **OAuth Client ID**, **Client secret** değerini **Client secret** alanına yapıştır. Google API key veya service account JSON dosyası bu bilgilerin yerine geçmez. [Google Web OAuth rehberi](https://developers.google.com/identity/protocols/oauth2/web-server)
+7. **Kanalı bağla.** **Kaydet ve hesabı bağla** düğmesine bas. Google ekranında yayın yapacağın hesabı ve sunuluyorsa ilgili YouTube / marka kanalını seç. İstenen izinlerin tamamını kontrol edip onayla. Panele dönünce doğru kanal adının **Sosyal hesaplar** altında göründüğünü kontrol et.
+8. **İkinci kanalı ekle.** **YouTube > Başka hesap ekle** düğmesine bas ve diğer hesap/kanalla izin adımını tekrarla. Aynı client bilgilerini kullan. İlk kanalın izni korunur; aynı kanalı yeniden bağlamak sadece o kanalın iznini yeniler.
+
+**İlk kontrol:** **İçerik stüdyosu** sayfasında kanalı seç, kısa bir MP4 ekle ve başlık, açıklama, görünürlüğü kontrol et. İlk yüklemeyi gizli görünürlükle deneyebilirsin. Daha sonra **Yayın zamanı > Tarih ve saat seç > YouTube’a yükle ve planla** ile gelecekte herkese açık yayın planlayabilirsin. [Zamanlama ayrıntıları](#tarih-ve-saatle-zamanlama).
+
+Eski bir bağlantıyla plan düzenleme izni hatası alırsan aynı kanalı yeniden bağla. Özel kapak yükleyebilmek için kanalın bu özelliğe erişimi de olmalı. Video başarıyla yüklenir ama kapak reddedilirse panel ikinci bir video yüklemez; mevcut video sonucunu ve kapak hatasını gösterir.
+
+**Testing ve Production farkı:** Bu panelin istediği izinlerle, **External / Testing** durumunda verilen yenileme token'ı yedi günde sona erer. Gerektiğinde hesabı tekrar bağla veya uygulamayı Production'a geçirip Google'ın kullanımına ve izinlerine göre istediği doğrulamaları tamamla. Production, iznin hiçbir zaman sona ermeyeceği anlamına gelmez. [Google token süreleri](https://developers.google.com/identity/protocols/oauth2#expiration)
 
 ## Instagram: gönderi ve Reels
 
-1. Instagram hesabını **Business** veya **Creator** profesyonel hesaba geçir.
-2. [Meta Developers](https://developers.facebook.com/apps/) üzerinde bir uygulama oluştur. **Instagram API with Instagram Login** ürününü ekle. Bu bağlantı yöntemi Facebook Sayfası bağlamanı gerektirmez.
-3. Geliştirme modunda kullanacağın Instagram hesabını uygulama rolüne / Instagram tester listesine ekle ve gerekiyorsa daveti hesap tarafından kabul et.
-4. **Instagram API setup > Business login** ayarlarında panelin gösterdiği HTTPS yönlendirme adresini kaydet. Örnek: `https://studio.example.com/api/social/oauth/instagram/callback`.
-5. Instagram ürününe ait **Instagram App ID** ve **Instagram App Secret** değerlerini panele gir. Facebook Login için farklı bir istemcinin bilgilerini kullanma.
-6. **Kaydet ve hesabı bağla** düğmesine bas. Instagram ekranında hesabını seç ve içerik paylaşma iznini onayla. İkinci hesabı **Başka hesap ekle** ile ekle.
+**Business** veya **Creator** profesyonel hesabı gerekiyor. Panelimiz **Instagram API with Instagram Login** kullanır. Bu yöntem Facebook Sayfası bağlamanı gerektirmez. Önce [HTTPS kurulumunu](#instagram-ve-tiktok-fotoğrafları-için-herkese-açık-https) tamamla; Meta hem görseli hem Reels videosunu buradan indirecek.
 
-İstenen izinler: `instagram_business_basic`, `instagram_business_content_publish`. Uygulama rolü dışındaki hesapları bağlamak için Meta incelemesi ve Advanced Access gerekebilir.
+1. **Instagram hesabını hazırla.** Instagram ayarlarında hesap türü / profesyonel hesap bölümünü bul. Gerekiyorsa hesabını **Business** veya **Creator** türüne geçir. Bağlayacağın her hesap için bunu kontrol et.
+2. **Meta uygulamasını oluştur.** [Meta Developers](https://developers.facebook.com/apps/) sayfasında **Create App** seç. Uygulama adı ve iletişim bilgilerini doldur. **Instagram API with Instagram Login** sağlayan Instagram kullanım senaryosunu / ürününü seç. Uygulama türü sorulursa bu ürünü destekleyen türü, genellikle **Business**, seç. Meta'nın menü adları uygulama yapılandırmasına göre değişebilir.
+3. **Test hesabını ekle.** Geliştirme sırasında Instagram ürününün test hesapları veya **App roles / Instagram Tester** bölümünden kullanacağın Instagram hesabını ekle. O Instagram hesabına giriş yapıp uygulama/site izinleri bölümündeki tester davetini varsa kabul et. Yalnızca davet göndermek izin vermeye yetmeyebilir.
+4. **Dönüş adresini kaydet.** Instagram ürününün **API setup / Business login** ayarlarına paneldeki **Sosyal hesaplar > Instagram > Bağlantıyı hazırla** bölümünden kopyaladığın HTTPS adresini ekle. Örnek: `https://studio.example.com/api/social/oauth/instagram/callback`. İstenirse web sitesi, gizlilik politikası ve veri silme bilgilerini uygulamanın gerçek bilgileriyle tamamla.
+5. **İzinleri kontrol et.** Panelin istediği izinler `instagram_business_basic` ve `instagram_business_content_publish`. Bunlar profesyonel hesap bağlantısı ve içerik paylaşımı içindir. Ürünün Instagram Login olduğundan ve izin adlarının eşleştiğinden emin ol. [Meta'nın resmi API örnekleri](https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login)
+6. **Instagram bilgilerini panele gir.** Instagram ürünündeki **Instagram App ID** ve **Instagram App Secret** değerlerini paneldeki aynı adlı alanlara yapıştır. Başka bir Facebook Login istemcisinin bilgilerini kullanma. **Kaydet ve hesabı bağla** düğmesine bas.
+7. **Hesaba izin ver.** Instagram ekranında doğru hesaba giriş yap ve istenen izinleri onayla. Dönüşte **Sosyal hesaplar** altında hesabın adını kontrol et. İkinci profesyonel hesabı **Instagram > Başka hesap ekle** ile aynı şekilde bağla. Her hesabın izni ayrı saklanır.
 
-İçerik stüdyosunda Instagram taslağını aç:
+**İlk paylaşım:** İçerik stüdyosunda Instagram taslağını aç ve hesabını seç:
 
 - **Gönderi** için JPEG görsel seç.
 - **Reels** için MP4 video seç. **Reels profil akışında da görünsün** seçeneğini düzenle.
 - İngilizce metni kontrol edip **Şimdi paylaş** veya **Tarih ve saat seç > Onayla ve planla** kullan.
 
-Panel medyayı hazırlar, Meta'nın işleme sonucunu bekler ve sonra yayınlar. Uzun süreli izinler kullanılır ve süresi dolmadan son yedi gün içinde kullanım sırasında yenilenir. Süresi tamamen dolmuş izinde hesabı tekrar bağlaman gerekir. [Instagram Login](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/), [Meta'nın resmi API örnekleri](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api?entity=request-23987686-3fe78620-2258-44b6-893f-42d76c7200d7).
+Panel medyayı hazırlar, Meta'nın işleme sonucunu bekler ve sonra yayınlar. Uzun süreli izinler, süreleri dolmadan son yedi gün içinde kullanım sırasında yenilenir. Süresi tamamen dolmuş izinde hesabı tekrar bağlaman gerekir.
+
+**Test hesaplarının dışına çıkarken:** Uygulama rolü dışındaki hesaplar için **App Review / Advanced Access** ve Meta'nın istediği işletme doğrulaması gerekebilir. Uygulama panelinde gösterilen gereklilikleri tamamla. [Instagram Login rehberi](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/)
 
 ## TikTok: video ve fotoğraf
 
-1. [TikTok Developers](https://developers.tiktok.com/apps/) üzerinde uygulamanı aç. **Login Kit** ve **Content Posting API / Direct Post** ürünlerini ekle.
-2. Panelin HTTPS yönlendirme adresini kaydet. Örnek: `https://studio.example.com/api/social/oauth/tiktok/callback`.
-3. **Client key** ve **Client secret** değerlerini panele gir. Hesabınla giriş yapıp `user.info.basic` ve `video.publish` izinlerini ver.
-4. Fotoğraf paylaşacaksan, uygulama ayarlarındaki **URL properties** bölümünde medya alan adını veya `https://studio.example.com/api/social/delivery/` önekini doğrula. DNS ile alan adı doğrulaması, sunucudan doğrulama dosyası sunmayı gerektirmez.
-5. Taslakta video veya JPEG/WebP fotoğraf seç. **Hesap bilgilerini yenile** düğmesine bas, görünürlüğü seç ve müzik koşullarını onayla. Video için önizleme süresinin yüklenmesini bekle. Ticari içerik / AI bildirimlerini gerektiği gibi seç.
+**Herkese açık yayın için başvurmadan önce:** TikTok, yalnızca senin veya ekibinin hesaplarına içerik yüklemeyi amaçlayan özel araçları Direct Post kurallarında uygun kullanım olarak kabul etmiyor. Social Studio kişisel bir paneldir; hesabı bağlamak veya gizli paylaşımı test etmek herkese açık API yayını için onay alacağın anlamına gelmez. [TikTok kullanım kuralları](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
 
-Fotoğrafta isteğe bağlı **TikTok önerilen müziği eklesin** seçeneği bulunur. Tek fotoğraf desteklenir. Her gönderi ayrı onaylanır; TikTok tekrarlayan otomatik akışa dahil değildir.
+1. **Geliştirici uygulaması oluştur.** [TikTok Developers](https://developers.tiktok.com/apps/) üzerinde giriş yap. **Manage apps > Connect an app** ile uygulama bilgilerini doldur. Panel Mac'te çalışsa bile mevcut OAuth akışımız için **Web** seç. Gerçek HTTPS web sitesi adresini gir. [Uygulama kayıt rehberi](https://developers.tiktok.com/docs/en/getting-started-create-an-app)
+2. **Sandbox oluştur.** Uygulama sayfasında **Sandbox > Create Sandbox** seç. **Sandbox settings > Target users > Add account** yolundan test edeceğin TikTok hesabına giriş yap. Diğer test hesaplarını da ekleyebilirsin; en fazla 10 hedef hesap desteklenir. Listede görünmeleri bir saate kadar sürebilir. Bu işlem herkese açık paylaşım onayı değildir. [Sandbox rehberi](https://developers.tiktok.com/docs/en/add-a-sandbox)
+3. **Giriş ve paylaşım ürünlerini ekle.** **Products > Add products** bölümünden **Login Kit** ve **Content Posting API** ekle. Content Posting API içinde **Direct Post** seçeneğini aç. Hesap bilgisi için `user.info.basic`, doğrudan paylaşım için `video.publish` izinlerini tanımla. Paylaşım izni hem uygulamada bulunmalı hem kullanıcı tarafından verilmelidir. [Direct Post kurulumu](https://developers.tiktok.com/docs/en/content-posting-api-get-started)
+4. **Yönlendirme adresini ekle.** **Login Kit > Web** ayarlarına panelin **Sosyal hesaplar > TikTok > Bağlantıyı hazırla** bölümünden kopyaladığın adresi yapıştır. Örnek: `https://studio.example.com/api/social/oauth/tiktok/callback`. TikTok Web, HTTPS kullanır; kayıtlı callback adresine sorgu parametresi veya `#` ekleme. Sandbox değişikliklerini **Apply changes** ile kaydet. [Web OAuth rehberi](https://developers.tiktok.com/docs/en/login-kit-web)
+5. **Bilgileri panele gir.** Kullandığın ortamın **Credentials** bölümündeki **Client key** ve **Client secret** değerlerini paneldeki aynı adlı alanlara yapıştır. **Kaydet ve hesabı bağla** düğmesine bas, doğru TikTok hesabına giriş yap ve istenen iki izni onayla. Hesabın **Sosyal hesaplar** listesinde görünmeli.
+6. **İkinci hesabı bağla.** **TikTok > Başka hesap ekle** düğmesine bas. Aynı geliştirici uygulamasını kullanarak ikinci hesaba izin ver. Tarayıcı otomatik olarak ilk hesabı seçiyorsa TikTok oturumunu ikinci hesaba geçirip tekrar başlat. Sandbox'ta ikinci hesabı önce **Target users** listesine ekle.
+7. **Fotoğraf için alan adını doğrula.** TikTok uygulamasındaki **URL properties** bölümünü aç. Medyanın sunulduğu alan adını, tercihen TikTok'un verdiği DNS kaydını alan adının DNS ayarlarına ekleyerek doğrula. Alternatif olarak `https://studio.example.com/api/social/delivery/` URL önekini doğrulayabilirsin; bu yöntem doğrulama dosyası sunmayı gerektirebilir ve panel bunu otomatik yapmaz. Fotoğraf adresi herkese açık HTTPS olmalı ve başka bir adrese yönlenmemeli. Video doğrudan dosya yüklemesi kullanır; fotoğraf bu doğrulanmış adresten indirilir. [Medya doğrulama rehberi](https://developers.tiktok.com/docs/en/content-posting-api-media-transfer-guide)
+8. **İlk paylaşımı dene.** **İçerik stüdyosu** sayfasında hesabını ve bir MP4 veya tek JPEG/WebP fotoğrafı seç. **Hesap bilgilerini yenile** düğmesine bas, görünürlüğü seç ve müzik koşullarını onayla. Video için önizleme süresinin yüklenmesini bekle. Ticari içerik / AI bildirimlerini gerektiği gibi seç. Son kontrolün ardından **Şimdi paylaş** veya zamanlama seçeneğini kullan.
 
-TikTok, incelenmemiş istemcilerde yayını gizliyle sınırlar. Kendi veya ekibinin hesaplarını yöneten özel kullanım araçları genel kullanıma yönelik API incelemesinde kabul edilmeyebilir. Bu nedenle herkese açık paylaşım izni garanti edilemez. [Direct Post](https://developers.tiktok.com/docs/en/content-posting-api-get-started), [fotoğraf API'si](https://developers.tiktok.com/docs/en/content-posting-api-reference-photo-post), [alan adı ve medya kuralları](https://developers.tiktok.com/docs/en/content-posting-api-media-transfer-guide), [inceleme kuralları](https://developers.tiktok.com/docs/en/content-sharing-guidelines).
+**Gizli test koşulları:** İncelemeden geçmeyen istemciler yalnızca **SELF_ONLY / Sadece ben** görünürlüğüyle yayın yapabilir. Paylaşım anında hesabın da gizli olması gerekir. Sandbox'a daha fazla hesap eklenebilse de incelemesiz istemcide 24 saat içinde en fazla beş kullanıcı paylaşım yapabilir. [Test yayın sınırları](https://developers.tiktok.com/docs/en/content-sharing-guidelines)
+
+**Herkese açık yayın başvurusu:** Sandbox ayarlarını **Production > Draft > Import** üzerinden aktar. Web sitesi, gizlilik politikası ve kullanım koşulları adreslerini doğrula. İstenen açıklamayı ve bağlantıdan paylaşıma kadar bütün akışı gösteren demo videoyu hazırlayıp uygulama incelemesine gönder. Gizli yayın kısıtının kaldırılması ayrıca **Direct Post audit** gerektirir. Gerçek kullanım amacını açıklamalısın; yukarıdaki özel araç kısıtı geçerlidir. [Başvuru adımları](https://developers.tiktok.com/docs/en/getting-started-create-an-app), [Direct Post incelemesi](https://developers.tiktok.com/docs/en/content-posting-api-get-started)
+
+Fotoğrafta isteğe bağlı **TikTok önerilen müziği eklesin** seçeneği bulunur. Tek fotoğraf desteklenir. Her gönderi ayrı onaylanır; TikTok tekrarlayan otomatik akışa dahil değildir. Planlanan gönderiler için bilgisayar uyanık, uygulama açık ve internet bağlı olmalı.
+
+## Bağlantı sorunları
+
+| Sorun | Kontrol et |
+| --- | --- |
+| Redirect / callback uyuşmuyor | Panelden adresi yeniden kopyala. HTTPS/HTTP, alan adı, port, yol ve sondaki `/` birebir eşleşmeli. |
+| YouTube test hesabını kabul etmiyor | Doğru Cloud projesinin **Audience > Test users** listesine o Google hesabını ekle. |
+| YouTube yaklaşık bir hafta sonra çalışmıyor | External/Testing izni yedi günde sona erer. Hesabı tekrar bağla veya uygun Production kurulumunu tamamla. |
+| Instagram hesabı bağlanmıyor | Profesyonel hesap türünü, kabul edilmiş tester davetini, Instagram Login bilgilerini ve paylaşım iznini kontrol et. |
+| Instagram veya TikTok medyayı indiremiyor | HTTPS adresi ve imzalı medya yolu erişilebilir olmalı. Proxy giriş ekranı veya tarayıcı doğrulaması indirmeyi engeller. TikTok fotoğraflarında alan adı doğrulaması da gerekir. |
+| TikTok herkese açık paylaşımı reddediyor | Sandbox / incelemesiz istemci herkese açık Direct Post yapamaz. Yukarıdaki inceleme koşullarını kontrol et. |
+| İkinci hesap yerine ilk hesap yeniden bağlanıyor | Sağlayıcının giriş ekranında / tarayıcı oturumunda hedef hesaba geç, sonra **Başka hesap ekle** işlemini tekrarla. |
 
 ## X
 
@@ -66,11 +116,11 @@ TikTok, incelenmemiş istemcilerde yayını gizliyle sınırlar. Kendi veya ekib
 
 ## Instagram ve TikTok fotoğrafları için herkese açık HTTPS
 
-Instagram ve TikTok fotoğraf API'si dosyayı uygulamadan indirir. `localhost`, yerel ağ IP'si veya özel Tailscale Serve adresi bu sunucular tarafından erişilemez. X, YouTube ve TikTok video yüklemeleri dosyayı doğrudan API'ye gönderir; ortak kitaplık yine aynı şekilde kullanılır.
+Instagram gönderi/Reels ve TikTok fotoğraf API'si dosyayı uygulamadan indirir. `localhost`, yerel ağ IP'si veya özel Tailscale Serve adresi bu sunucular tarafından erişilemez. X, YouTube ve TikTok video yüklemeleri dosyayı doğrudan API'ye gönderir; ancak bu projedeki TikTok Web OAuth bağlantısı için yine HTTPS callback gerekir.
 
 1. İlk sahip kurulumunu yerel adreste tamamla ve güçlü bir panel şifresi kullan.
-2. Kendi alan adını ve HTTPS reverse proxy / tünel hizmetini Node sunucuna bağla. Node dinleyicisini `127.0.0.1` üzerinde tut. Sertifikanın geçerli ve genel olarak güvenilir olması gerekir.
-3. Uygulamayı durdur. Aktif profilin `.env` dosyasında `PUBLIC_BASE_URL=https://studio.example.com` olarak kendi gerçek HTTPS adresini yaz. `HOST=127.0.0.1` ve mevcut `PORT` değeri korunur. Kaynaktan çalıştırırken profil proje klasörüdür; Mac paketinde `~/Library/Application Support/Social Studio/` kullanılır.
+2. Kendi alan adını ve HTTPS reverse proxy / tünel hizmetini Node sunucuna bağla. Bu hizmet, dışarıdan gelen istekleri bilgisayarındaki uygulamaya iletir. Node dinleyicisini `127.0.0.1` üzerinde tut. Sertifikanın geçerli ve genel olarak güvenilir olması gerekir. TikTok fotoğrafları için sahipliğini doğrulayabileceğin bir alan adı seç.
+3. Uygulamayı durdur. Aktif profilin `.env` dosyasında `PUBLIC_BASE_URL=https://studio.example.com` olarak kendi gerçek HTTPS adresini yaz. `HOST=127.0.0.1` ve mevcut `PORT` değeri korunur. Kaynaktan çalıştırırken profil proje klasörüdür; Mac paketinde `~/Library/Application Support/Social Studio/` kullanılır. Yalnızca `.env` değiştirmek alan adı, sertifika veya tünel oluşturmaz.
 4. Proxy, aynı alan adını `Host` başlığında korumalı. API POST isteklerini, videoların Range isteklerini ve büyük yüklemeleri geçirmeli. Video işleme sırasında isteğin açık kalabilmesi için proxy yanıt zaman aşımını en az 10 dakika ayarla. Uygulamayı açıp aynı HTTPS adresinden yeniden giriş yap.
 5. Sağlayıcıların izin verilen yönlendirme adreslerini panelde yeni gösterilen adreslerle güncelle. Eski OAuth bağlantısını yenilemen gerekebilir.
 6. `/api/social/delivery/` yolu ek bir proxy giriş ekranına yönlenmemeli. Sağlayıcıların imzalı dosyayı çerez olmadan okuyabilmesi gerekir. Bu yolun sorgu parametrelerini proxy erişim günlüklerinden çıkar.
